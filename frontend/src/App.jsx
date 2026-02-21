@@ -10,9 +10,9 @@ import {
 } from './data';
 
 const pages = [
-  { key: 'discover', label: '1. 스탬프 투어 탐색' },
-  { key: 'plan', label: '2. 내 투어 계획' },
-  { key: 'collect', label: '3. 스탬프 기록' },
+  { key: 'discover', label: '탐색', icon: '🔍' },
+  { key: 'plan', label: '계획', icon: '📅' },
+  { key: 'collect', label: '기록', icon: '🏅' },
 ];
 
 const prettyPeriod = {
@@ -313,26 +313,32 @@ export function App() {
   );
 
   return (
-    <main className="page">
-      <header className="top-nav">
-        <h1>Stamp Tourer MVP</h1>
-        <p className="subtitle">핵심 흐름: 탐색(Discover) → 계획(Plan) → 기록(Collect)</p>
-        <nav className="tabs" aria-label="기능 내비게이션">
-          {pages.map((page) => (
-            <button
-              key={page.key}
-              className={currentPage === page.key ? 'is-active' : ''}
-              onClick={() => setCurrentPage(page.key)}
-            >
-              {page.label}
-            </button>
-          ))}
-        </nav>
+    <div className="app-shell">
+      <header className="top-bar">
+        <h1 className="top-bar-title">Stamp Tourer</h1>
+        <button className="settings-btn" aria-label="설정" onClick={() => alert('설정 페이지는 준비 중입니다.')}>
+          ⚙️
+        </button>
       </header>
 
-      {currentPage === 'discover' && renderDiscoverPage()}
-      {currentPage === 'plan' && renderPlanPage()}
-      {currentPage === 'collect' && renderCollectPage()}
-    </main>
+      <main className="page-content">
+        {currentPage === 'discover' && renderDiscoverPage()}
+        {currentPage === 'plan' && renderPlanPage()}
+        {currentPage === 'collect' && renderCollectPage()}
+      </main>
+
+      <nav className="bottom-nav" aria-label="기능 내비게이션">
+        {pages.map((page) => (
+          <button
+            key={page.key}
+            className={`bottom-nav-item${currentPage === page.key ? ' is-active' : ''}`}
+            onClick={() => setCurrentPage(page.key)}
+          >
+            <span className="bottom-nav-icon">{page.icon}</span>
+            <span className="bottom-nav-label">{page.label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
   );
 }
