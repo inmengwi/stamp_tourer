@@ -1,17 +1,23 @@
 # Stamp Tourer MVP Service
 
-기획 문서를 바탕으로 MVP 핵심 기능(투어 조회/찜/스탬프 기록/내 컬렉션)을 검증할 수 있는 인메모리 Python 서비스 구현입니다.
+기획 문서를 바탕으로 MVP 핵심 기능(투어 조회/찜/스탬프 기록/내 컬렉션)을 검증하는 백엔드 서비스와 프론트엔드 샘플을 포함합니다.
 
-## 실행/검증
+## 구성
+
+- `app/main.py`: 인메모리 Python 서비스
+- `tests/test_mvp_service.py`: 서비스 단위 테스트
+- `frontend/`: React 기반 MVP 화면
+
+## 백엔드 검증
 
 ```bash
 python -m pytest -q
 ```
 
-## MVP 구현 범위
+## 프론트엔드 실행
 
-- 투어 목록/필터 조회
-- 투어 상세/스탬프 스팟 조회
-- 찜 추가/해제, 내 찜 목록 조회
-- 수동 스탬프 기록(중복 방지)
-- 내 컬렉션(총 개수 + 기록 목록) 조회
+```bash
+cd frontend
+npm install
+npm run dev
+```
