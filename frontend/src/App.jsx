@@ -21,6 +21,33 @@ const prettyPeriod = {
   upcoming: '예정',
 };
 
+const prettyDifficulty = {
+  beginner: '초급',
+  mid: '중급',
+  expert: '고급',
+};
+
+const prettyDuration = {
+  day: '당일',
+  weekend: '1박 2일',
+  long: '2박 이상',
+};
+
+const prettyVerification = {
+  qr: 'QR 코드 스캔',
+  gps: 'GPS 체크인',
+  photo: '사진 업로드',
+  manual: '수동 입력',
+};
+
+const prettyCategory = {
+  railway: '철도',
+  sightseeing: '관광',
+  festival: '축제',
+  local: '지역',
+  theme: '테마',
+};
+
 export function App() {
   const [currentPage, setCurrentPage] = useState('discover');
   const [keyword, setKeyword] = useState('');
@@ -73,6 +100,11 @@ export function App() {
   const completePlan = (tourId) => {
     setCompletedPlans((prev) => (prev.includes(tourId) ? prev : [...prev, tourId]));
     setActivePlans((prev) => prev.filter((id) => id !== tourId));
+  };
+
+  const openDetail = (tourId) => {
+    setSelectedTourId(tourId);
+    setCurrentPage('detail');
   };
 
   const saveStampRecord = () => {
@@ -165,7 +197,7 @@ export function App() {
               </div>
             </div>
             <div className="stack-actions">
-              <button onClick={() => setSelectedTourId(tour.id)}>상세 보기</button>
+              <button onClick={() => openDetail(tour.id)}>상세 보기</button>
               <button onClick={() => toggleWishlist(tour.id)}>{wishlist.includes(tour.id) ? '위시리스트 해제' : '위시리스트 저장'}</button>
               <button onClick={() => startPlan(tour.id)}>내 계획에 추가</button>
             </div>
@@ -175,6 +207,216 @@ export function App() {
       {filteredTours.length === 0 && <p>조건에 맞는 투어가 없습니다.</p>}
     </section>
   );
+
+  const renderDetailPage = () => {
+    if (!selectedTour) return null;
+
+    const tour = selectedTour;
+    const acquiredSpotIds = records.map((r) => r.spotId);
+    const acquiredCount = tour.spots.filter((s) => acquiredSpotIds.includes(s.id)).length;
+    const isInWishlist = wishlist.includes(tour.id);
+    const isActive = activePlans.includes(tour.id);
+
+    return (
+      <section className="detail-page">
+        {/* A. 헤더 영역 */}
+        <div className="detail-header">
+          <button className="back-btn" onClick={() => setCurrentPage('discover')}>
+            ← 목록으로
+          </button>
+          <div className="detail-thumbnail">{tour.thumbnailEmoji}</div>
+          <h2 className="detail-title">{tour.title}</h2>
+          <div className="detail-tags">
+            <span className="tag">{prettyCategory[tour.category]}</span>
+            <span className="tag">{tour.regionCode}</span>
+            <span className="tag">{prettyDifficulty[tour.difficulty]}</span>
+            <span className="tag">{prettyPeriod[tour.period]}</span>
+          </div>
+          <div className="detail-meta-row">
+            <span>평점 {tour.reviewScore}</span>
+            <span>참여자 {tour.participants.toLocaleString()}명</span>
+          </div>
+          <p className="detail-organizer">주최: {tour.organizer}</p>
+        </div>
+
+        {/* B. 투어 요약 카드 */}
+        <div className="detail-summary-grid">
+          <article>
+            <div className="summary-value">{tour.spots.length}개</div>
+            <div className="summary-label">스탬프</div>
+          </article>
+          <article>
+            <div className="summary-value">{tour.estimatedHours}시간</div>
+            <div className="summary-label">예상 소요</div>
+          </article>
+          <article>
+            <div className="summary-value">{tour.estimatedCost}</div>
+            <div className="summary-label">예상 비용</div>
+          </article>
+          <article>
+            <div className="summary-value">{prettyDuration[tour.duration]}</div>
+            <div className="summary-label">소요 기간</div>
+          </article>
+        </div>
+
+        {/* C. 투어 소개 */}
+        <div className="detail-section">
+          <h3>투어 소개</h3>
+          <p>{tour.description}</p>
+          <dl className="detail-info-list">
+            <div>
+              <dt>운영 기간</dt>
+              <dd>{prettyPeriod[tour.period]}</dd>
+            </div>
+            <div>
+              <dt>참여 대상</dt>
+              <dd>{tour.targetAudience}</dd>
+            </div>
+            <div>
+              <dt>난이도</dt>
+              <dd>{prettyDifficulty[tour.difficulty]}</dd>
+            </div>
+          </dl>
+        </div>
+
+        {/* D. 스팟 목록 */}
+        <div className="detail-section">
+          <h3>방문 장소 ({tour.spots.length}곳)</h3>
+          {isActive && (
+            <div className="detail-progress">
+              <progress value={acquiredCount} max={tour.spots.length} />
+              <span>
+                {acquiredCount}/{tour.spots.length} 완료 ({Math.round((acquiredCount / tour.spots.length) * 100)}%)
+              </span>
+            </div>
+          )}
+          <ul className="spot-list">
+            {tour.spots.map((spot, index) => {
+              const visited = acquiredSpotIds.includes(spot.id);
+              return (
+                <li key={spot.id} className={`spot-card${visited ? ' is-visited' : ''}`}>
+                  <div className="spot-number">{visited ? '✓' : index + 1}</div>
+                  <div className="spot-info">
+                    <strong>{spot.name}</strong>
+                    {spot.description && <p className="spot-desc">{spot.description}</p>}
+                    <div className="spot-meta">
+                      <span>{spot.address}</span>
+                      <span>{spot.openHours}</span>
+                    </div>
+                    <div className="spot-verification">
+                      {spot.verificationTypes.map((v) => (
+                        <span key={v} className="verification-badge">
+                          {prettyVerification[v]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {/* E. 참여 방법 */}
+        <div className="detail-section">
+          <h3>참여 방법</h3>
+          <ol className="guide-steps">
+            <li>투어 상세 페이지에서 "투어 참여하기" 버튼을 눌러 참여를 시작합니다.</li>
+            <li>각 스팟을 방문하여 아래 인증 방법 중 하나로 스탬프를 수집합니다.</li>
+            <li>모든 스팟을 방문하면 완주 보상을 받을 수 있습니다.</li>
+          </ol>
+          <h4>인증 방법</h4>
+          <ul className="verification-list">
+            {tour.verificationMethods.map((method) => (
+              <li key={method} className="verification-item">
+                <strong>{prettyVerification[method]}</strong>
+                {method === 'qr' && <span> - 스팟에 비치된 QR 코드를 스캔하여 인증</span>}
+                {method === 'gps' && <span> - 스팟 반경 200m 이내에서 GPS로 자동 인증</span>}
+                {method === 'photo' && <span> - 스팟 방문 사진을 촬영하여 업로드 인증</span>}
+                {method === 'manual' && <span> - 방문 후 직접 수동으로 기록 입력</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* F. 보상 정보 */}
+        <div className="detail-section">
+          <h3>보상 정보</h3>
+          <div className="reward-final">
+            <strong>완주 보상</strong>
+            <p>{tour.reward}</p>
+          </div>
+          <h4>단계별 마일스톤</h4>
+          <ul className="milestone-list">
+            {tour.milestones.map((ms) => {
+              const reached = acquiredCount >= ms.stampCount;
+              return (
+                <li key={ms.stampCount} className={`milestone-item${reached ? ' is-reached' : ''}`}>
+                  <div className="milestone-bar">
+                    <div className="milestone-dot">{reached ? '✓' : ms.stampCount}</div>
+                    <div className="milestone-line" />
+                  </div>
+                  <div className="milestone-info">
+                    <strong>{ms.stampCount}개 달성</strong>
+                    <span>{ms.reward}</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {/* G. 주의사항 */}
+        <div className="detail-section">
+          <h3>주의사항</h3>
+          <ul className="notice-list">
+            {tour.notices.map((notice, i) => (
+              <li key={i}>{notice}</li>
+            ))}
+          </ul>
+        </div>
+
+        {/* H. 문의/정보 */}
+        <div className="detail-section">
+          <h3>문의 및 안내</h3>
+          <dl className="detail-info-list">
+            <div>
+              <dt>주최</dt>
+              <dd>{tour.organizer}</dd>
+            </div>
+            <div>
+              <dt>전화</dt>
+              <dd>{tour.contactInfo.phone}</dd>
+            </div>
+            <div>
+              <dt>이메일</dt>
+              <dd>{tour.contactInfo.email}</dd>
+            </div>
+            <div>
+              <dt>웹사이트</dt>
+              <dd>{tour.contactInfo.website}</dd>
+            </div>
+          </dl>
+        </div>
+
+        {/* I. 하단 액션 바 */}
+        <div className="detail-actions">
+          <button className="action-wishlist" onClick={() => toggleWishlist(tour.id)}>
+            {isInWishlist ? '♥ 저장됨' : '♡ 위시리스트'}
+          </button>
+          <button
+            className="action-join"
+            onClick={() => {
+              startPlan(tour.id);
+              setCurrentPage('plan');
+            }}
+          >
+            {isActive ? '계획 페이지로' : '투어 참여하기'}
+          </button>
+        </div>
+      </section>
+    );
+  };
 
   const renderPlanPage = () => {
     const wishlistTours = TOURS.filter((tour) => wishlist.includes(tour.id));
@@ -228,7 +470,7 @@ export function App() {
                 </div>
                 <div className="stack-actions">
                   <button onClick={() => completePlan(tour.id)}>완료 처리</button>
-                  <button onClick={() => setSelectedTourId(tour.id)}>상세 보기</button>
+                  <button onClick={() => openDetail(tour.id)}>상세 보기</button>
                 </div>
               </li>
             );
@@ -312,6 +554,8 @@ export function App() {
     </section>
   );
 
+  const activeNavKey = currentPage === 'detail' ? 'discover' : currentPage;
+
   return (
     <div className="app-shell">
       <header className="top-bar">
@@ -323,6 +567,7 @@ export function App() {
 
       <main className="page-content">
         {currentPage === 'discover' && renderDiscoverPage()}
+        {currentPage === 'detail' && renderDetailPage()}
         {currentPage === 'plan' && renderPlanPage()}
         {currentPage === 'collect' && renderCollectPage()}
       </main>
@@ -331,7 +576,7 @@ export function App() {
         {pages.map((page) => (
           <button
             key={page.key}
-            className={`bottom-nav-item${currentPage === page.key ? ' is-active' : ''}`}
+            className={`bottom-nav-item${activeNavKey === page.key ? ' is-active' : ''}`}
             onClick={() => setCurrentPage(page.key)}
           >
             <span className="bottom-nav-icon">{page.icon}</span>
