@@ -644,6 +644,283 @@ progress {
   background: #1d4ed8;
 }
 
+/* ---- Register Page ---- */
+.reg-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.reg-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.reg-label input,
+.reg-label select,
+.reg-label textarea {
+  font-weight: 400;
+  font-size: 14px;
+}
+
+.reg-label textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.required {
+  color: #ef4444;
+}
+
+.reg-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.btn-search {
+  flex: 2;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-search:hover {
+  background: #1d4ed8;
+}
+
+.btn-manual {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #374151;
+}
+
+.reg-hint {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.reg-hint h4 {
+  font-size: 13px;
+  margin: 0 0 8px;
+  color: #6b7280;
+}
+
+.reg-hint ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hint-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+  text-align: left;
+}
+
+.hint-link:hover {
+  text-decoration: underline;
+}
+
+/* Loading */
+.reg-loading {
+  text-align: center;
+  padding: 60px 18px;
+}
+
+.reg-loading h3 {
+  margin: 16px 0 4px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  margin: 0 auto;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Edit Form */
+.reg-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.reg-label.full {
+  grid-column: 1 / -1;
+}
+
+.reg-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.reg-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.reg-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+
+/* Spot edit form */
+.reg-spot-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reg-spot-form input {
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.btn-add {
+  width: 100%;
+  padding: 10px;
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.btn-add:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.btn-remove {
+  align-self: flex-end;
+  padding: 4px 10px;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Milestone edit */
+.milestone-edit-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.milestone-edit-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ms-count {
+  width: 50px;
+  text-align: center;
+  font-size: 13px;
+  padding: 6px 4px;
+}
+
+.ms-sep {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.ms-reward {
+  flex: 1;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.btn-remove-sm {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #fca5a5;
+  border-radius: 50%;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Notice edit */
+.notice-edit-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notice-edit-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notice-edit-item input {
+  flex: 1;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 480px) {
   .grid-5,
@@ -667,5 +944,13 @@ progress {
 
   .detail-actions {
     bottom: 64px;
+  }
+
+  .reg-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reg-actions {
+    flex-direction: column;
   }
 }
