@@ -14,9 +14,35 @@ body {
   padding: 24px;
 }
 
+.top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f3f4f6;
+  padding-bottom: 12px;
+}
+
 .subtitle {
   margin-top: -6px;
   color: #4b5563;
+}
+
+.tabs,
+.bottom-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.tabs button,
+.bottom-nav button {
+  white-space: nowrap;
+}
+
+.is-active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
 }
 
 .card {
@@ -60,14 +86,19 @@ button {
   gap: 8px;
 }
 
-.two-column {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.bottom-nav {
+  position: sticky;
+  bottom: 0;
+  background: #f3f4f6;
+  padding: 8px 0;
 }
 
 @media (max-width: 768px) {
-  .two-column {
-    grid-template-columns: 1fr;
+  .controls,
+  .spot-item,
+  .tour-item,
+  .spot-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
