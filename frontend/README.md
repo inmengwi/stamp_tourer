@@ -16,3 +16,16 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## Cloudflare 배포 설정 팁
+
+Cloudflare 설정 화면에서 **Build command가 optional이고 Deploy command가 필수**인 경우,
+`deploy command`에 빌드 + 업로드를 함께 넣으면 됩니다.
+
+```bash
+npm run build && npx wrangler pages deploy dist --project-name <YOUR_PROJECT_NAME>
+```
+
+- Root directory: `frontend`
+- Build output directory: `dist`
+- `--project-name`에는 Cloudflare Pages 프로젝트명을 입력합니다.
