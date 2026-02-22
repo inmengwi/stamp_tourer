@@ -64,19 +64,20 @@
 
 ## 5.1 상위 구성
 - **Frontend (PWA)**: Next.js 기반 웹 앱
-- **Backend API**: REST API (NestJS 또는 FastAPI)
-- **DB**: PostgreSQL + PostGIS(위치 데이터 대비)
-- **File Storage**: 스탬프 인증 이미지(향후), 프로필 이미지 저장용 객체 스토리지
-- **Background Worker**: 마감 임박/운영시간 알림 스케줄러
+- **Backend API**: Cloudflare Workers 기반 REST API (Hono 또는 itty-router)
+- **DB**: Cloudflare D1 (SQLite 기반)
+- **File Storage**: Cloudflare R2(스탬프 인증 이미지(향후), 프로필 이미지)
+- **Cache**: Cloudflare KV + Cache API (목록/상세 조회 응답 캐시)
+- **Background Worker**: Cron Triggers + Queue/Workflow(필요 시)
 
 ## 5.2 권장 기술 스택 (MVP)
 - Frontend: Next.js + TypeScript + TanStack Query + TailwindCSS
-- Backend: NestJS + TypeScript + Prisma ORM
-- DB: PostgreSQL 16 + PostGIS
+- Backend: Cloudflare Workers + TypeScript + Hono(또는 itty-router) + Drizzle ORM
+- DB: Cloudflare D1
 - Auth: JWT(Access/Refresh) + OAuth 확장 가능 구조
-- Infra: 단일 리전 배포(예: Vercel + Managed DB or Docker + VM)
+- Infra: Cloudflare 우선 구성(Workers + D1 + R2 + KV + Cache API)
 
-> 백엔드를 Python(FastAPI)로 선택해도 무방하나, 프론트/백 TypeScript 단일 언어 운영 효율을 고려해 NestJS를 1안으로 제시.
+> MVP에서는 PostGIS 의존 고급 위치 질의(`lat/lng` 반경/최근접 고급 연산)를 제외하고, `minLat/maxLat/minLng/maxLng` 기반 bounding box 필터 + 단순 거리/이름 정렬로 대체한다.
 
 ---
 
@@ -125,7 +126,7 @@
 - tour_id (fk)
 - name
 - address
-- lat, lng (PostGIS point 가능)
+- lat, lng (MVP: 실수 컬럼 + bounding box 조회)
 - operation_hours
 - verification_type (manual/gps/qr/photo)
 - created_at, updated_at
@@ -158,6 +159,12 @@
 ---
 
 ## 7. API 설계 (REST 초안)
+
+> 경로 규칙은 `/api/v1/...`를 유지하며, Workers 환경 표준으로 인증/에러 응답을 JSON envelope로 통일한다.
+>
+> - 성공: `{ "success": true, "data": ..., "meta"?: ... }`
+> - 실패: `{ "success": false, "error": { "code": "...", "message": "...", "details"?: ... } }`
+> - 인증: `Authorization: Bearer <accessToken>` 사용, `401/403`는 위 실패 포맷으로 반환
 
 ## 7.1 인증
 - `POST /api/v1/auth/signup`
@@ -204,6 +211,8 @@
 초기에는 복잡한 실시간 푸시 대신 다음을 제공:
 - 앱 내 알림함(in-app)
 - 이메일 알림(선택)
+
+스케줄링 방식: Cron Triggers + Queue/Workflow(필요 시)
 
 스케줄러 작업:
 1. 종료일 D-7, D-3, D-1 투어 알림 생성
