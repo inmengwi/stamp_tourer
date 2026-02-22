@@ -13,7 +13,8 @@ import {
 const pages = [
   { key: 'discover', label: '탐색', icon: '🔍' },
   { key: 'register', label: '등록', icon: '➕' },
-  { key: 'plan', label: '계획', icon: '📅' },
+  { key: 'plan', label: '내 투어', icon: '📅' },
+  { key: 'wishlist', label: '위시리스트', icon: '💖' },
   { key: 'collect', label: '기록', icon: '🏅' },
 ];
 
@@ -64,6 +65,8 @@ export function App() {
   const [completedPlans, setCompletedPlans] = useState([]);
   const [planDates, setPlanDates] = useState({});
   const [selectedTourId, setSelectedTourId] = useState(TOURS[0]?.id);
+
+  const [previousPage, setPreviousPage] = useState('discover');
 
   const [records, setRecords] = useState([]);
   const [recordType, setRecordType] = useState('qr');
@@ -121,6 +124,7 @@ export function App() {
 
   const openDetail = (tourId) => {
     setSelectedTourId(tourId);
+    setPreviousPage(currentPage);
     setCurrentPage('detail');
   };
 
@@ -368,7 +372,7 @@ export function App() {
   const renderDiscoverPage = () => (
     <section className="card">
       <h2>스탬프 투어 탐색</h2>
-      <p className="helper">키워드, 지역, 기간, 정렬 기준으로 투어를 탐색하고 바로 계획에 추가합니다.</p>
+      <p className="helper">키워드, 지역, 기간, 정렬 기준으로 투어를 탐색하고 바로 내 투어에 추가합니다.</p>
 
       <div className="controls grid-5">
         <input placeholder="투어/지역/테마 검색" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
@@ -418,7 +422,7 @@ export function App() {
             <div className="stack-actions">
               <button onClick={() => openDetail(tour.id)}>상세 보기</button>
               <button onClick={() => toggleWishlist(tour.id)}>{wishlist.includes(tour.id) ? '위시리스트 해제' : '위시리스트 저장'}</button>
-              <button onClick={() => startPlan(tour.id)}>내 계획에 추가</button>
+              <button onClick={() => startPlan(tour.id)}>내 투어에 추가</button>
             </div>
           </li>
         ))}
@@ -440,8 +444,8 @@ export function App() {
       <section className="detail-page">
         {/* A. 헤더 영역 */}
         <div className="detail-header">
-          <button className="back-btn" onClick={() => setCurrentPage('discover')}>
-            ← 목록으로
+          <button className="back-btn" onClick={() => setCurrentPage(previousPage)}>
+            ← 돌아가기
           </button>
           <div className="detail-thumbnail">{tour.thumbnailEmoji}</div>
           <h2 className="detail-title">{tour.title}</h2>
@@ -630,7 +634,7 @@ export function App() {
               setCurrentPage('plan');
             }}
           >
-            {isActive ? '계획 페이지로' : '투어 참여하기'}
+            {isActive ? '내 투어 페이지로' : '투어 참여하기'}
           </button>
         </div>
       </section>
@@ -917,41 +921,36 @@ export function App() {
   };
 
   const renderPlanPage = () => {
-    const wishlistTours = allTours.filter((tour) => wishlist.includes(tour.id));
     const activeTours = allTours.filter((tour) => activePlans.includes(tour.id));
     const doneTours = allTours.filter((tour) => completedPlans.includes(tour.id));
 
     return (
       <section className="card">
-        <h2>내 투어 계획</h2>
-        <p className="helper">위시리스트/참여 등록/일정/진행률을 한 곳에서 관리합니다.</p>
+        <h2>내 투어</h2>
+        <p className="helper">진행 중인 투어와 완료된 투어를 한 곳에서 관리합니다.</p>
 
-        <div className="plan-summary">
+        <div className="plan-summary two-col">
           <article>
-            <h3>위시리스트</h3>
-            <p>{wishlistTours.length}개</p>
-          </article>
-          <article>
-            <h3>진행 중 투어</h3>
+            <h3>진행 중</h3>
             <p>{activeTours.length}개</p>
           </article>
           <article>
-            <h3>완료 투어</h3>
+            <h3>완료</h3>
             <p>{doneTours.length}개</p>
           </article>
         </div>
 
-        <h3>진행 중 체크리스트</h3>
+        <h3>진행 중인 투어</h3>
         <ul className="list">
           {activeTours.map((tour) => {
             const acquiredCount = recordsWithMeta.filter((record) => record.tourTitle === tour.title).length;
             const progress = Math.round((acquiredCount / tour.spots.length) * 100);
             return (
-              <li key={tour.id} className="tour-card">
+              <li key={tour.id} className="tour-card is-clickable" onClick={() => openDetail(tour.id)}>
                 <div>
                   <strong>{tour.title}</strong>
                   <p>예상 {tour.estimatedHours}시간 · 예상 비용 {tour.estimatedCost}</p>
-                  <label>
+                  <label onClick={(e) => e.stopPropagation()}>
                     투어 예정일
                     <input
                       type="date"
@@ -966,7 +965,7 @@ export function App() {
                     </span>
                   </div>
                 </div>
-                <div className="stack-actions">
+                <div className="stack-actions" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => completePlan(tour.id)}>완료 처리</button>
                   <button onClick={() => openDetail(tour.id)}>상세 보기</button>
                 </div>
@@ -974,25 +973,67 @@ export function App() {
             );
           })}
         </ul>
-        {activeTours.length === 0 && <p>진행 중인 투어가 없습니다. 탐색 페이지에서 계획에 추가해보세요.</p>}
+        {activeTours.length === 0 && <p>진행 중인 투어가 없습니다. 탐색 페이지에서 투어를 추가해보세요.</p>}
 
-        <h3>선택 투어 상세</h3>
-        {selectedTour && (
-          <article className="detail-box">
-            <strong>{selectedTour.title}</strong>
-            <p>{selectedTour.description}</p>
-            <p>
-              완주 조건: {selectedTour.spots.length}개 스팟 방문 · 보상: {selectedTour.reward}
-            </p>
-            <ul>
-              {selectedTour.spots.map((spot) => (
-                <li key={spot.id}>
-                  {spot.name} ({spot.openHours}) - {spot.address}
-                </li>
-              ))}
-            </ul>
-          </article>
-        )}
+        <h3>완료된 투어</h3>
+        <ul className="list">
+          {doneTours.map((tour) => {
+            const acquiredCount = recordsWithMeta.filter((record) => record.tourTitle === tour.title).length;
+            return (
+              <li key={tour.id} className="tour-card is-clickable" onClick={() => openDetail(tour.id)}>
+                <div>
+                  <strong>{tour.title}</strong>
+                  <p>{tour.spots.length}개 스팟 · {acquiredCount}개 스탬프 수집</p>
+                  <div className="meta">
+                    <span>{tour.regionCode}</span>
+                    <span>{prettyCategory[tour.category]}</span>
+                  </div>
+                </div>
+                <div className="stack-actions" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => openDetail(tour.id)}>상세 보기</button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {doneTours.length === 0 && <p>아직 완료된 투어가 없습니다.</p>}
+      </section>
+    );
+  };
+
+  const renderWishlistPage = () => {
+    const wishlistTours = allTours.filter((tour) => wishlist.includes(tour.id));
+
+    return (
+      <section className="card">
+        <h2>위시리스트</h2>
+        <p className="helper">관심 있는 투어를 모아보고, 바로 참여할 수 있습니다.</p>
+
+        <ul className="list">
+          {wishlistTours.map((tour) => {
+            const isActive = activePlans.includes(tour.id);
+            return (
+              <li key={tour.id} className="tour-card">
+                <div>
+                  <strong>{tour.title}</strong>
+                  <p>{tour.description}</p>
+                  <div className="meta">
+                    <span>{tour.regionCode}</span>
+                    <span>{prettyPeriod[tour.period]}</span>
+                    <span>스탬프 {tour.spots.length}개</span>
+                    <span>평점 {tour.reviewScore}</span>
+                  </div>
+                </div>
+                <div className="stack-actions">
+                  <button onClick={() => openDetail(tour.id)}>상세 보기</button>
+                  <button onClick={() => toggleWishlist(tour.id)}>위시리스트 해제</button>
+                  {!isActive && <button onClick={() => startPlan(tour.id)}>내 투어에 추가</button>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {wishlistTours.length === 0 && <p>위시리스트에 추가된 투어가 없습니다. 탐색 페이지에서 관심 투어를 저장해보세요.</p>}
       </section>
     );
   };
@@ -1052,7 +1093,7 @@ export function App() {
     </section>
   );
 
-  const activeNavKey = currentPage === 'detail' ? 'discover' : currentPage;
+  const activeNavKey = currentPage === 'detail' ? previousPage : currentPage;
 
   return (
     <div className="app-shell">
@@ -1078,11 +1119,11 @@ export function App() {
           <li>
             <button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('plan'))}>
               <span className="side-menu-icon">📅</span>
-              <span>진행 중 투어</span>
+              <span>내 투어</span>
             </button>
           </li>
           <li>
-            <button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('plan'))}>
+            <button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('wishlist'))}>
               <span className="side-menu-icon">💖</span>
               <span>위시리스트</span>
             </button>
@@ -1107,6 +1148,7 @@ export function App() {
         {currentPage === 'detail' && renderDetailPage()}
         {currentPage === 'register' && renderRegisterPage()}
         {currentPage === 'plan' && renderPlanPage()}
+        {currentPage === 'wishlist' && renderWishlistPage()}
         {currentPage === 'collect' && renderCollectPage()}
       </main>
 
