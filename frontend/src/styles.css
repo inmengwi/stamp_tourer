@@ -120,7 +120,7 @@ select {
   background: #fff;
 }
 
-.page-content button {
+.page-content button:not(.btn-search):not(.action-join) {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   padding: 8px 10px;
@@ -657,7 +657,7 @@ progress {
   color: #374151;
 }
 
-.page-content .detail-actions .action-join {
+.page-content .action-join {
   flex: 2;
   padding: 12px;
   border: none;
@@ -669,7 +669,7 @@ progress {
   cursor: pointer;
 }
 
-.page-content .detail-actions .action-join:hover {
+.page-content .action-join:hover {
   background: #1d4ed8;
 }
 
