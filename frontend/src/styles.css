@@ -1142,3 +1142,33 @@ progress {
     align-items: flex-start;
   }
 }
+
+.multi-tour-box {
+  border: 1px dashed #93c5fd;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #eff6ff;
+}
+
+.multi-tour-box h4 {
+  margin: 0 0 6px;
+}
+
+.subtour-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.subtour-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.spot-subtour-label {
+  color: #2563eb;
+  font-weight: 600;
+}

@@ -81,8 +81,22 @@ export function App() {
   const [searchDesc, setSearchDesc] = useState('');
   const [registerForm, setRegisterForm] = useState(null);
   const [editSpots, setEditSpots] = useState([]);
+  const [onlineStructure, setOnlineStructure] = useState([]);
   const [editMilestones, setEditMilestones] = useState([]);
   const [editNotices, setEditNotices] = useState([]);
+
+  const extractSpotsFromTour = (tour) => {
+    if (Array.isArray(tour.subTours) && tour.subTours.length > 0) {
+      return tour.subTours.flatMap((subTour) =>
+        subTour.stamps.map((stamp) => ({
+          ...stamp,
+          subTourTitle: subTour.title,
+        })),
+      );
+    }
+
+    return tour.spots ?? [];
+  };
 
   const openMenu = () => setIsMenuOpen(true);
   const closeMenu = () => setIsMenuOpen(false);
@@ -208,12 +222,15 @@ export function App() {
           tags: t.tags.join(', '),
           thumbnailEmoji: t.thumbnailEmoji,
         });
-        setEditSpots(t.spots.map((s) => ({ ...s, id: crypto.randomUUID() })));
+        const spotsFromResult = extractSpotsFromTour(t);
+        setEditSpots(spotsFromResult.map((s) => ({ ...s, id: crypto.randomUUID() })));
+        setOnlineStructure(t.subTours ?? []);
         setEditMilestones([...t.milestones]);
         setEditNotices([...t.notices]);
       } else {
         setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
         setEditSpots([]);
+        setOnlineStructure([]);
         setEditMilestones([]);
         setEditNotices([]);
       }
@@ -338,6 +355,7 @@ export function App() {
     setEditSpots([]);
     setEditMilestones([]);
     setEditNotices([]);
+    setOnlineStructure([]);
     // 등록한 투어의 상세 페이지로 이동
     setSelectedTourId(newTour.id);
     setCurrentPage('detail');
@@ -351,6 +369,7 @@ export function App() {
     setEditSpots([]);
     setEditMilestones([]);
     setEditNotices([]);
+    setOnlineStructure([]);
   };
 
   const saveStampRecord = () => {
@@ -698,6 +717,7 @@ export function App() {
               onClick={() => {
                 setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
                 setEditSpots([]);
+                setOnlineStructure([]);
                 setEditMilestones([]);
                 setEditNotices([]);
                 setRegisterStep('edit');
@@ -850,12 +870,27 @@ export function App() {
 
         {/* 스팟 목록 */}
         <div className="detail-section">
+          {onlineStructure.length > 0 && (
+            <div className="multi-tour-box">
+              <h4>온라인 조회 구조 (Sub Tour & Stamp)</h4>
+              <p className="helper">{onlineStructure.length}개 길로 구성되며, 총 {onlineStructure.reduce((sum, s) => sum + s.stamps.length, 0)}개 스탬프를 조회했습니다.</p>
+              <ul className="subtour-list">
+                {onlineStructure.map((subTour) => (
+                  <li key={subTour.id}>
+                    <strong>{subTour.title}</strong>
+                    <span>{subTour.stamps.length}개 스탬프</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <h3>방문 장소 ({editSpots.length}곳)</h3>
           <ul className="spot-list">
             {editSpots.map((spot, index) => (
               <li key={spot.id} className="spot-card">
                 <div className="spot-number">{index + 1}</div>
                 <div className="spot-info reg-spot-form">
+                  {spot.subTourTitle && <small className="spot-subtour-label">소속 길: {spot.subTourTitle}</small>}
                   <input placeholder="장소 이름 *" value={spot.name} onChange={(e) => updateSpot(index, 'name', e.target.value)} />
                   <input placeholder="주소" value={spot.address} onChange={(e) => updateSpot(index, 'address', e.target.value)} />
                   <input placeholder="운영시간 (예: 09:00-18:00)" value={spot.openHours} onChange={(e) => updateSpot(index, 'openHours', e.target.value)} />

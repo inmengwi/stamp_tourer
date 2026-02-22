@@ -229,6 +229,77 @@ export const VERIFICATION_OPTIONS = [
   { value: 'manual', label: '수동 입력' },
 ];
 
+const NATIONAL_HERITAGE_PATHS = [
+  { name: '궁궐길', count: 8, region: '서울' },
+  { name: '왕릉길', count: 8, region: '수도권' },
+  { name: '산사길', count: 7, region: '충청/경상' },
+  { name: '백제문화길', count: 8, region: '충청' },
+  { name: '신라천년길', count: 8, region: '경주권' },
+  { name: '가야문화길', count: 7, region: '경남' },
+  { name: '서원길', count: 7, region: '영남/호남' },
+  { name: '성곽길', count: 8, region: '전국' },
+  { name: '근대유산길', count: 8, region: '전국' },
+  { name: '제주자연유산길', count: 7, region: '제주' },
+];
+
+const SHARED_HERITAGE_SPOTS = [
+  {
+    name: '경복궁',
+    address: '서울 종로구 사직로 161',
+    openHours: '09:00-18:00',
+    description: '조선 왕조의 법궁, 근정전과 경회루가 대표 명소',
+    verificationTypes: ['gps', 'manual'],
+  },
+  {
+    name: '수원화성',
+    address: '경기 수원시 팔달구 정조로 910',
+    openHours: '09:00-18:00',
+    description: '정조의 효심이 담긴 유네스코 세계유산 성곽',
+    verificationTypes: ['gps', 'manual'],
+  },
+  {
+    name: '해인사',
+    address: '경남 합천군 가야면 해인사길 122',
+    openHours: '08:30-18:00',
+    description: '팔만대장경을 보관한 유네스코 세계유산 사찰',
+    verificationTypes: ['gps', 'manual'],
+  },
+  {
+    name: '불국사',
+    address: '경북 경주시 불국로 385',
+    openHours: '09:00-18:00',
+    description: '통일신라 불교 예술의 정수, 석가탑과 다보탑',
+    verificationTypes: ['gps', 'manual'],
+  },
+];
+
+const createNationalHeritageSubTours = () => {
+  let stampNo = 1;
+
+  return NATIONAL_HERITAGE_PATHS.map((path, pathIndex) => {
+    const generatedStamps = Array.from({ length: path.count }, (_, index) => ({
+      name: `${path.name} 스탬프 ${index + 1}`,
+      address: `${path.region} 국가유산 거점 ${index + 1}`,
+      openHours: '09:00-18:00',
+      description: `${path.name} 대표 국가유산 방문 스탬프`,
+      verificationTypes: ['gps', 'manual'],
+      stampRef: `NH-${String(stampNo++).padStart(3, '0')}`,
+    }));
+
+    if (pathIndex === 0) generatedStamps[0] = { ...generatedStamps[0], ...SHARED_HERITAGE_SPOTS[0] };
+    if (pathIndex === 1) generatedStamps[0] = { ...generatedStamps[0], ...SHARED_HERITAGE_SPOTS[1] };
+    if (pathIndex === 2) generatedStamps[0] = { ...generatedStamps[0], ...SHARED_HERITAGE_SPOTS[2] };
+    if (pathIndex === 3) generatedStamps[0] = { ...generatedStamps[0], ...SHARED_HERITAGE_SPOTS[3] };
+    if (pathIndex === 7) generatedStamps[1] = { ...generatedStamps[1], ...SHARED_HERITAGE_SPOTS[1] }; // 중복 거점 예시
+
+    return {
+      id: `heritage-path-${pathIndex + 1}`,
+      title: `${path.name} (${path.region})`,
+      stamps: generatedStamps,
+    };
+  });
+};
+
 /** 온라인 조회 시뮬레이션용 데이터베이스.
  *  실제 서비스에서는 백엔드 API가 웹에서 투어 정보를 검색/스크래핑하여 반환합니다. */
 export const ONLINE_TOUR_DB = [
@@ -269,13 +340,7 @@ export const ONLINE_TOUR_DB = [
       },
       tags: ['국가유산', '전국투어', '상시', '여권'],
       thumbnailEmoji: '🏛️',
-      spots: [
-        { name: '경복궁', address: '서울 종로구 사직로 161', openHours: '09:00-18:00', description: '조선 왕조의 법궁, 근정전과 경회루가 대표 명소', verificationTypes: ['gps', 'manual'] },
-        { name: '창덕궁', address: '서울 종로구 율곡로 99', openHours: '09:00-18:00', description: '유네스코 세계유산, 후원의 아름다움이 유명', verificationTypes: ['gps', 'manual'] },
-        { name: '수원화성', address: '경기 수원시 팔달구 정조로 910', openHours: '09:00-18:00', description: '정조의 효심이 담긴 유네스코 세계유산 성곽', verificationTypes: ['gps', 'manual'] },
-        { name: '해인사', address: '경남 합천군 가야면 해인사길 122', openHours: '08:30-18:00', description: '팔만대장경을 보관한 유네스코 세계유산 사찰', verificationTypes: ['gps', 'manual'] },
-        { name: '불국사', address: '경북 경주시 불국로 385', openHours: '09:00-18:00', description: '통일신라 불교 예술의 정수, 석가탑과 다보탑', verificationTypes: ['gps', 'manual'] },
-      ],
+      subTours: createNationalHeritageSubTours(),
     },
   },
   {
