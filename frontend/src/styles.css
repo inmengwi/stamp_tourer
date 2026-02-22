@@ -6,6 +6,12 @@
   --app-max-width: 480px;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+}
+
 body {
   margin: 0;
 }
@@ -656,7 +662,7 @@ progress {
   }
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1440px) {
   :root {
     --app-max-width: 1180px;
   }
