@@ -52,6 +52,7 @@ const prettyCategory = {
 
 export function App() {
   const [currentPage, setCurrentPage] = useState('discover');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState('');
   const [region, setRegion] = useState('');
@@ -77,6 +78,10 @@ export function App() {
   const [editSpots, setEditSpots] = useState([]);
   const [editMilestones, setEditMilestones] = useState([]);
   const [editNotices, setEditNotices] = useState([]);
+
+  const openMenu = () => setIsMenuOpen(true);
+  const closeMenu = () => setIsMenuOpen(false);
+  const handleMenuItemClick = (action) => { closeMenu(); action(); };
 
   const allTours = [...TOURS, ...userTours];
   const allSpots = allTours.flatMap((tour) => tour.spots.map((spot) => ({ ...spot, tourId: tour.id, tourTitle: tour.title })));
@@ -1053,10 +1058,49 @@ export function App() {
     <div className="app-shell">
       <header className="top-bar">
         <h1 className="top-bar-title">Stamp Tourer</h1>
-        <button className="settings-btn" aria-label="설정" onClick={() => alert('설정 페이지는 준비 중입니다.')}>
-          ⚙️
+        <button className="menu-btn" aria-label="메뉴 열기" onClick={openMenu}>
+          ☰
         </button>
       </header>
+
+      <div
+        className={`menu-overlay${isMenuOpen ? ' is-open' : ''}`}
+        onClick={closeMenu}
+      />
+      <nav className={`side-menu${isMenuOpen ? ' is-open' : ''}`} aria-label="메인 메뉴">
+        <div className="side-menu-header">
+          <h2 className="side-menu-title">메뉴</h2>
+          <button className="side-menu-close" aria-label="메뉴 닫기" onClick={closeMenu}>
+            ✕
+          </button>
+        </div>
+        <ul className="side-menu-list">
+          <li>
+            <button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('plan'))}>
+              <span className="side-menu-icon">📅</span>
+              <span>진행 중 투어</span>
+            </button>
+          </li>
+          <li>
+            <button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('plan'))}>
+              <span className="side-menu-icon">💖</span>
+              <span>위시리스트</span>
+            </button>
+          </li>
+          <li>
+            <button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('collect'))}>
+              <span className="side-menu-icon">🏅</span>
+              <span>기록</span>
+            </button>
+          </li>
+          <li>
+            <button className="side-menu-item" onClick={() => handleMenuItemClick(() => alert('설정 페이지는 준비 중입니다.'))}>
+              <span className="side-menu-icon">⚙️</span>
+              <span>설정</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
 
       <main className="page-content">
         {currentPage === 'discover' && renderDiscoverPage()}

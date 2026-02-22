@@ -38,10 +38,10 @@ body {
   margin: 0;
 }
 
-.settings-btn {
+.menu-btn {
   background: none;
   border: none;
-  font-size: 22px;
+  font-size: 24px;
   cursor: pointer;
   padding: 6px;
   line-height: 1;
@@ -49,7 +49,7 @@ body {
   color: #fff;
 }
 
-.settings-btn:hover {
+.menu-btn:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 
@@ -919,6 +919,117 @@ progress {
   flex: 1;
   font-size: 13px;
   padding: 6px 8px;
+}
+
+/* ---- Side Menu Overlay ---- */
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.menu-overlay.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ---- Side Menu Panel ---- */
+.side-menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px;
+  max-width: 80vw;
+  height: 100%;
+  height: 100dvh;
+  background: #fff;
+  z-index: 101;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+}
+
+.side-menu.is-open {
+  transform: translateX(0);
+}
+
+.side-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 56px;
+  background: #2563eb;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.side-menu-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.side-menu-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  line-height: 1;
+}
+
+.side-menu-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.side-menu-list {
+  list-style: none;
+  padding: 8px 0;
+  margin: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.side-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 20px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.side-menu-item:hover {
+  background: #f3f4f6;
+}
+
+.side-menu-item:active {
+  background: #e5e7eb;
+}
+
+.side-menu-icon {
+  font-size: 20px;
+  line-height: 1;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 /* ---- Responsive ---- */
