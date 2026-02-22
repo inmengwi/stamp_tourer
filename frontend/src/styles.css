@@ -229,6 +229,17 @@ select {
   gap: 8px;
 }
 
+
+.plan-date-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-date-range input {
+  width: 100%;
+}
+
 progress {
   width: 120px;
 }
