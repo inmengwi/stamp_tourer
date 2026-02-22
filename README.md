@@ -5,6 +5,7 @@
 ## 구성
 
 - `frontend/`: React 기반 MVP 화면
+- `backend/`: Cloudflare Workers + D1 기반 API 스캐폴드
 
 ## 프론트엔드 실행
 
@@ -19,3 +20,13 @@ npm run dev
 - 투어 탐색/상세/참여/위시리스트/기록 흐름
 - **투어 등록 플로우**: 투어명·설명 입력 → 온라인 조회 시뮬레이션 → 상세 수정 후 등록
 - **복합 투어(subTours) 지원**: 온라인 조회 결과가 `subTours` 구조일 때 단일 스팟 목록으로 펼쳐 편집/등록
+
+
+## 백엔드 실행
+
+```bash
+cd backend
+npm install
+npm run db:migrate:local
+npm run dev
+```
