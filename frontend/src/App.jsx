@@ -136,6 +136,21 @@ export function App() {
     setCurrentPage('progress');
   };
 
+  const getPlanDateRange = (tourId) => planDates[tourId] ?? { startDate: '', endDate: '' };
+
+  const updatePlanDateRange = (tourId, field, value) => {
+    setPlanDates((prev) => {
+      const currentRange = prev[tourId] ?? { startDate: '', endDate: '' };
+      return {
+        ...prev,
+        [tourId]: {
+          ...currentRange,
+          [field]: value,
+        },
+      };
+    });
+  };
+
   const emptyForm = () => ({
     title: '',
     description: '',
@@ -953,6 +968,7 @@ export function App() {
           {activeTours.map((tour) => {
             const acquiredCount = recordsWithMeta.filter((record) => record.tourTitle === tour.title).length;
             const progress = Math.round((acquiredCount / tour.spots.length) * 100);
+            const planDateRange = getPlanDateRange(tour.id);
             return (
               <li key={tour.id} className="tour-card is-clickable" onClick={() => openDetail(tour.id)}>
                 <div>
@@ -960,11 +976,21 @@ export function App() {
                   <p>예상 {tour.estimatedHours}시간 · 예상 비용 {tour.estimatedCost}</p>
                   <label onClick={(e) => e.stopPropagation()}>
                     투어 예정일
-                    <input
-                      type="date"
-                      value={planDates[tour.id] || ''}
-                      onChange={(event) => setPlanDates((prev) => ({ ...prev, [tour.id]: event.target.value }))}
-                    />
+                    <div className="plan-date-range">
+                      <input
+                        type="date"
+                        aria-label="투어 시작일"
+                        value={planDateRange.startDate}
+                        onChange={(event) => updatePlanDateRange(tour.id, 'startDate', event.target.value)}
+                      />
+                      <span>~</span>
+                      <input
+                        type="date"
+                        aria-label="투어 종료일"
+                        value={planDateRange.endDate}
+                        onChange={(event) => updatePlanDateRange(tour.id, 'endDate', event.target.value)}
+                      />
+                    </div>
                   </label>
                   <div className="progress-wrap">
                     <progress value={acquiredCount} max={tour.spots.length} />
