@@ -156,6 +156,97 @@
 - created_at
 - unique(user_id, tour_id)
 
+## 6.4 D1 전용 데이터 규칙
+
+### 6.4.1 PK/타임스탬프 표준
+- **PK 전략 통일**: 전 테이블 PK는 `TEXT` 타입 ULID(`ulid()`)를 사용한다. UUID v4도 가능하나, D1의 B-Tree 인덱스 지역성과 정렬 친화성을 고려해 ULID를 기본값으로 채택한다.
+- **타임스탬프 저장 형식 통일**: `created_at`, `updated_at`, `acquired_at`, `started_at` 등 시간 컬럼은 모두 **UTC 기준 Unix epoch milliseconds(`INTEGER`)**로 저장한다.
+- **표기 규칙**: API 응답 직전 계층에서만 ISO-8601 문자열로 변환하고, DB 레이어는 epoch milliseconds를 유지한다.
+
+### 6.4.2 enum 필드 표준
+- D1(SQLite)에서는 enum 타입이 없으므로, MVP에서는 **`CHECK` 제약 방식으로 통일**한다.
+- 운영자가 값 집합을 동적으로 확장해야 하는 필드(v2+)만 참조 테이블(`*_codes`)로 분리한다.
+
+예시:
+
+```sql
+role TEXT NOT NULL CHECK (role IN ('user', 'admin')),
+status TEXT NOT NULL CHECK (status IN ('planned', 'in_progress', 'completed')),
+verification_type TEXT NOT NULL CHECK (verification_type IN ('manual', 'gps', 'qr', 'photo'))
+```
+
+### 6.4.3 참여/찜/스탬프 기록 제약 및 인덱스(D1 SQL)
+
+```sql
+-- tour_participations
+CREATE TABLE IF NOT EXISTS tour_participations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  tour_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('planned', 'in_progress', 'completed')),
+  started_at INTEGER,
+  completed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (tour_id) REFERENCES tours(id),
+  CONSTRAINT uq_tour_participations_user_tour UNIQUE (user_id, tour_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tour_participations_user_status
+  ON tour_participations (user_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tour_participations_tour_status
+  ON tour_participations (tour_id, status);
+
+-- wishlists
+CREATE TABLE IF NOT EXISTS wishlists (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  tour_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (tour_id) REFERENCES tours(id),
+  CONSTRAINT uq_wishlists_user_tour UNIQUE (user_id, tour_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wishlists_user_created_at
+  ON wishlists (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wishlists_tour_created_at
+  ON wishlists (tour_id, created_at DESC);
+
+-- stamp_records
+CREATE TABLE IF NOT EXISTS stamp_records (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  stamp_spot_id TEXT NOT NULL,
+  acquired_at INTEGER NOT NULL,
+  memo TEXT,
+  proof_image_url TEXT,
+  verification_method TEXT NOT NULL CHECK (verification_method IN ('manual', 'gps', 'qr', 'photo')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (stamp_spot_id) REFERENCES stamp_spots(id),
+  CONSTRAINT uq_stamp_records_user_spot UNIQUE (user_id, stamp_spot_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stamp_records_user_acquired_at
+  ON stamp_records (user_id, acquired_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stamp_records_spot_acquired_at
+  ON stamp_records (stamp_spot_id, acquired_at DESC);
+```
+
+### 6.4.4 마이그레이션 도구/배포 순서
+- **도구 선택**: `Drizzle ORM + drizzle-kit`을 기본 마이그레이션 도구로 사용한다. (Cloudflare D1 공식 가이드/생태계 기준으로 Workers 연동이 단순하고 SQL 산출물이 명확함)
+- **마이그레이션 산출물 관리**: `drizzle/<timestamp>_*.sql` 파일을 Git에 커밋하고, PR에서 SQL diff를 리뷰한다.
+- **배포 파이프라인 적용 순서**:
+  1. CI에서 `drizzle-kit generate`로 마이그레이션 정합성 확인
+  2. 스테이징 D1에 `wrangler d1 migrations apply <DB_NAME> --env staging`
+  3. 스모크 테스트(핵심 API + 읽기/쓰기 경로)
+  4. 프로덕션 배포 직전 `wrangler d1 migrations apply <DB_NAME> --env production`
+  5. Workers 배포(`wrangler deploy`) 및 헬스체크
+- **원칙**: 애플리케이션 코드 배포보다 DB 마이그레이션을 선행하고, 파괴적 변경(`DROP`, `NOT NULL` 추가 등)은 항상 2단계(추가 → 백필 → 전환)로 릴리즈한다.
+
 ---
 
 ## 7. API 설계 (REST 초안)
