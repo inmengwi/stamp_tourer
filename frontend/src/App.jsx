@@ -64,6 +64,8 @@ export function App() {
   const [activePlans, setActivePlans] = useState([]);
   const [completedPlans, setCompletedPlans] = useState([]);
   const [planDates, setPlanDates] = useState({});
+  const [spotSchedules, setSpotSchedules] = useState({});
+  const [visitedSpots, setVisitedSpots] = useState({});
   const [selectedTourId, setSelectedTourId] = useState(TOURS[0]?.id);
 
   const [previousPage, setPreviousPage] = useState('discover');
@@ -126,6 +128,12 @@ export function App() {
     setSelectedTourId(tourId);
     setPreviousPage(currentPage);
     setCurrentPage('detail');
+  };
+
+  const openProgress = (tourId) => {
+    setSelectedTourId(tourId);
+    setPreviousPage(currentPage);
+    setCurrentPage('progress');
   };
 
   const emptyForm = () => ({
@@ -967,7 +975,8 @@ export function App() {
                 </div>
                 <div className="stack-actions" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => completePlan(tour.id)}>완료 처리</button>
-                  <button onClick={() => openDetail(tour.id)}>상세 보기</button>
+                  <button onClick={() => openDetail(tour.id)}>투어 상세 보기</button>
+                  <button onClick={() => openProgress(tour.id)}>진행 상세</button>
                 </div>
               </li>
             );
@@ -997,6 +1006,136 @@ export function App() {
           })}
         </ul>
         {doneTours.length === 0 && <p>아직 완료된 투어가 없습니다.</p>}
+      </section>
+    );
+  };
+
+  const renderProgressPage = () => {
+    if (!selectedTour) return null;
+
+    const tour = selectedTour;
+    const acquiredSpotIds = records.map((r) => r.spotId);
+
+    const isSpotDone = (spotId) =>
+      visitedSpots[spotId] === true || acquiredSpotIds.includes(spotId);
+
+    const doneCount = tour.spots.filter((s) => isSpotDone(s.id)).length;
+    const totalCount = tour.spots.length;
+    const progressPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+
+    return (
+      <section className="detail-page">
+        {/* 헤더 */}
+        <div className="detail-header">
+          <button className="back-btn" onClick={() => setCurrentPage(previousPage)}>
+            ← 돌아가기
+          </button>
+          <div className="detail-thumbnail">{tour.thumbnailEmoji}</div>
+          <h2 className="detail-title">{tour.title}</h2>
+          <p className="helper">방문 일정과 진행 상태를 관리합니다.</p>
+        </div>
+
+        {/* 진행 요약 */}
+        <div className="detail-summary-grid">
+          <article>
+            <div className="summary-value">{totalCount}곳</div>
+            <div className="summary-label">전체 장소</div>
+          </article>
+          <article>
+            <div className="summary-value">{doneCount}곳</div>
+            <div className="summary-label">방문 완료</div>
+          </article>
+          <article>
+            <div className="summary-value">{totalCount - doneCount}곳</div>
+            <div className="summary-label">미방문</div>
+          </article>
+          <article>
+            <div className="summary-value">{progressPercent}%</div>
+            <div className="summary-label">진행률</div>
+          </article>
+        </div>
+
+        {/* 진행 현황 */}
+        <div className="detail-section">
+          <h3>진행 현황</h3>
+          <div className="detail-progress">
+            <progress value={doneCount} max={totalCount} />
+            <span>{doneCount}/{totalCount} ({progressPercent}%)</span>
+          </div>
+        </div>
+
+        {/* 방문 장소 목록 */}
+        <div className="detail-section">
+          <h3>방문 장소 ({totalCount}곳)</h3>
+
+          {totalCount === 0 && <p>등록된 방문 장소가 없습니다.</p>}
+
+          <ul className="spot-list">
+            {tour.spots.map((spot, index) => {
+              const done = isSpotDone(spot.id);
+              const hasRecord = acquiredSpotIds.includes(spot.id);
+
+              return (
+                <li key={spot.id} className={`spot-card${done ? ' is-visited' : ''}`}>
+                  <div className="spot-number">{done ? '✓' : index + 1}</div>
+                  <div className="spot-info">
+                    <strong>{spot.name}</strong>
+                    {spot.description && <p className="spot-desc">{spot.description}</p>}
+                    <div className="spot-meta">
+                      <span>{spot.address}</span>
+                      <span>{spot.openHours}</span>
+                    </div>
+
+                    {/* 방문 예정일 */}
+                    <div className="progress-spot-schedule">
+                      <label className="progress-date-label">
+                        방문 예정일
+                        <input
+                          type="date"
+                          value={spotSchedules[spot.id] || ''}
+                          onChange={(e) =>
+                            setSpotSchedules((prev) => ({
+                              ...prev,
+                              [spot.id]: e.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    {/* 완료 체크 */}
+                    <div className="progress-spot-check">
+                      <label className="progress-check-label">
+                        <input
+                          type="checkbox"
+                          checked={done}
+                          disabled={hasRecord}
+                          onChange={(e) =>
+                            setVisitedSpots((prev) => ({
+                              ...prev,
+                              [spot.id]: e.target.checked,
+                            }))
+                          }
+                        />
+                        {hasRecord ? '스탬프 기록으로 방문 확인됨' : '방문 완료'}
+                      </label>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {/* 하단 액션 바 */}
+        <div className="detail-actions">
+          <button className="action-wishlist" onClick={() => setCurrentPage(previousPage)}>
+            돌아가기
+          </button>
+          <button className="action-join" onClick={() => openDetail(tour.id)}>
+            투어 상세 보기
+          </button>
+        </div>
       </section>
     );
   };
@@ -1093,7 +1232,7 @@ export function App() {
     </section>
   );
 
-  const activeNavKey = currentPage === 'detail' ? previousPage : currentPage;
+  const activeNavKey = (currentPage === 'detail' || currentPage === 'progress') ? previousPage : currentPage;
 
   return (
     <div className="app-shell">
@@ -1146,6 +1285,7 @@ export function App() {
       <main className="page-content">
         {currentPage === 'discover' && renderDiscoverPage()}
         {currentPage === 'detail' && renderDetailPage()}
+        {currentPage === 'progress' && renderProgressPage()}
         {currentPage === 'register' && renderRegisterPage()}
         {currentPage === 'plan' && renderPlanPage()}
         {currentPage === 'wishlist' && renderWishlistPage()}
