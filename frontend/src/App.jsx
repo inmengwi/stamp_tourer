@@ -999,7 +999,8 @@ export function App() {
                   </div>
                 </div>
                 <div className="stack-actions" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => openDetail(tour.id)}>상세 보기</button>
+                  <button onClick={() => openDetail(tour.id)}>투어 상세 보기</button>
+                  <button onClick={() => openProgress(tour.id)}>진행 상세</button>
                 </div>
               </li>
             );
