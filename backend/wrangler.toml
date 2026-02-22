@@ -1,0 +1,16 @@
+name = "stamp-tourer-api"
+main = "src/index.ts"
+compatibility_date = "2025-02-20"
+
+[vars]
+JWT_ISSUER = "stamp-tourer"
+ACCESS_TOKEN_TTL_SECONDS = "900"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "stamp-tourer-db"
+database_id = "REPLACE_WITH_REAL_DATABASE_ID"
+migrations_dir = "migrations"
+
+[observability.logs]
+enabled = true
