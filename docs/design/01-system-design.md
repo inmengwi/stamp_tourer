@@ -198,10 +198,15 @@
 
 ## 8. 권한 및 보안
 
-- 인증: JWT + Refresh Token Rotation
+- 인증: Workers 환경에서 **짧은 TTL Access Token(예: 10~15분) + Refresh Token Rotation**을 기본 채택
+- 토큰 저장 위치: Access/Refresh 모두 `HttpOnly + Secure + SameSite(기본 Lax, 필요 시 Strict)` 쿠키에 저장하고, JS 접근 가능한 저장소(localStorage/sessionStorage) 사용 금지
 - 권한: `user`, `admin` RBAC
 - 데이터 보호: 비밀번호 해시(Argon2/Bcrypt), 개인정보 최소 수집
-- API 보호: Rate Limiting, 입력 검증(Zod/class-validator)
+- 서명 키 관리: JWT 서명 키는 Cloudflare Secrets로만 주입하며 평문 환경변수/저장소 커밋 금지
+- 키 롤오버: `kid`(버전 키) 기반 다중 검증 기간을 두고, `신규 키 발급 → Secrets 반영 → 신규 토큰부터 신규 kid 서명 → 구버전 만료 후 제거` 순서로 운영
+- Refresh 토큰 상태 저장소: **기본은 D1 세션 테이블**(`refresh_sessions`, `revoked_at`)을 사용해 회전/강제 로그아웃의 강한 일관성을 확보하고, 초고빈도 조회 캐시가 필요할 때만 KV를 보조 캐시로 사용
+- 저장소 선택 기준: `일관성 우선(보안/감사/강제무효화 정확성)`은 D1, `읽기 지연/대량 트래픽 흡수 우선`은 KV로 분리하되, 최종 진실원본(Source of Truth)은 D1로 유지
+- API 보호: Rate limiting을 Cloudflare WAF/Rules(엣지 1차 차단) + 애플리케이션 레벨 사용자/엔드포인트별 제한(2차 보완)으로 이원화, 입력 검증(Zod/class-validator) 병행
 - 감사로그: admin 변경 이력 기록
 
 ---
