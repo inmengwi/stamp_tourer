@@ -657,7 +657,7 @@ progress {
   color: #374151;
 }
 
-.action-join {
+.page-content .action-join {
   flex: 2;
   padding: 12px;
   border: none;
@@ -669,7 +669,7 @@ progress {
   cursor: pointer;
 }
 
-.action-join:hover {
+.page-content .action-join:hover {
   background: #1d4ed8;
 }
 
@@ -716,7 +716,7 @@ progress {
   margin-bottom: 20px;
 }
 
-.btn-search {
+.page-content .btn-search {
   flex: 2;
   padding: 12px;
   border: none;
