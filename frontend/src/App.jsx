@@ -762,7 +762,7 @@ export function App() {
             </label>
             <label className="reg-label full">
               투어 설명
-              <textarea rows={3} value={registerForm.description} onChange={(e) => updateFormField('description', e.target.value)} />
+              <textarea rows={4} value={registerForm.description} onChange={(e) => updateFormField('description', e.target.value)} />
             </label>
             <label className="reg-label">
               썸네일
