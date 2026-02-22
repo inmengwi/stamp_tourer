@@ -25,6 +25,7 @@
 - 스탬프 투어 상세 조회
 - 스탬프 획득 기록(수동)
 - 내 컬렉션(진행률, 획득 내역)
+- 사용자 투어 등록(온라인 조회 기반 초안 + 수동 보정)
 
 ### 3.2 제한적 포함 (Should Have 중 선별)
 - 검색/필터(키워드, 지역, 테마, 진행 상태)
@@ -86,6 +87,7 @@
 ## 6.1 핵심 엔터티
 - **User**: 사용자 계정
 - **Tour**: 스탬프 투어 메타데이터
+- **SubTour**: 다중 코스형 투어의 하위 경로(선택)
 - **StampSpot**: 개별 스탬프 위치/운영 정보
 - **TourParticipation**: 사용자-투어 참여 상태
 - **StampRecord**: 사용자 스탬프 획득 기록
@@ -93,7 +95,9 @@
 - **Review**(v2): 투어 리뷰/평점
 
 ## 6.2 관계 요약
-- Tour 1:N StampSpot
+- Tour 1:N SubTour (선택)
+- SubTour 1:N StampSpot
+- Tour 1:N StampSpot (단일 코스형은 sub_tour_id 없이 직접 연결)
 - User N:M Tour (TourParticipation)
 - User 1:N StampRecord, StampRecord N:1 StampSpot
 - User N:M Tour (Wishlist)
@@ -121,9 +125,17 @@
 - source_type (official/user/report/hybrid)
 - created_at, updated_at
 
+### sub_tours (선택)
+- id (uuid, pk)
+- tour_id (fk)
+- title
+- sort_order
+- created_at, updated_at
+
 ### stamp_spots
 - id (uuid, pk)
 - tour_id (fk)
+- sub_tour_id (fk, nullable)
 - name
 - address
 - lat, lng (MVP: 실수 컬럼 + bounding box 조회)
@@ -267,6 +279,7 @@ CREATE INDEX IF NOT EXISTS idx_stamp_records_spot_acquired_at
 - `GET /api/v1/tours?keyword=&region=&category=&status=&sort=`
 - `GET /api/v1/tours/{tourId}`
 - `GET /api/v1/tours/{tourId}/spots`
+- `GET /api/v1/tours/{tourId}/sub-tours` (복합 코스형 투어일 때 하위 코스 + 스탬프 반환)
 
 ## 7.3 참여/찜
 - `POST /api/v1/tours/{tourId}/participations`
@@ -283,6 +296,8 @@ CREATE INDEX IF NOT EXISTS idx_stamp_records_spot_acquired_at
 ## 7.5 운영자(초기 내부)
 - `POST /api/v1/admin/tours`
 - `PATCH /api/v1/admin/tours/{tourId}`
+- `POST /api/v1/admin/tours:import` (외부/온라인 조회 기반 초안 생성)
+- `POST /api/v1/admin/sub-tours`
 - `POST /api/v1/admin/stamp-spots`
 
 ---
