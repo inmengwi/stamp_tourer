@@ -51,10 +51,41 @@ app.onError((err, c) => {
   );
 });
 
-app.get('/api/v1/health', (c) => {
-  return c.json<ApiSuccess<{ status: 'ok' }>>({
+const requiredTables = ['users', 'tours', 'stamp_spots'] as const;
+
+app.get('/api/v1/health', async (c) => {
+  const existingTablesResult = await c.env.DB.prepare(
+    `SELECT name
+     FROM sqlite_master
+     WHERE type = 'table'
+       AND name IN (${requiredTables.map(() => '?').join(', ')})`,
+  )
+    .bind(...requiredTables)
+    .all<{ name: string }>();
+
+  const existingTableNames = new Set(existingTablesResult.results?.map((row) => row.name) ?? []);
+  const missingTables = requiredTables.filter((table) => !existingTableNames.has(table));
+
+  if (missingTables.length > 0) {
+    return c.json<ApiError>(
+      {
+        success: false,
+        error: {
+          code: 'DB_SCHEMA_MISSING',
+          message: 'D1 스키마가 적용되지 않았습니다. 마이그레이션을 실행하세요.',
+          details: { missingTables },
+        },
+      },
+      500,
+    );
+  }
+
+  return c.json<ApiSuccess<{ status: 'ok'; tables: readonly string[] }>>({
     success: true,
-    data: { status: 'ok' },
+    data: {
+      status: 'ok',
+      tables: requiredTables,
+    },
   });
 });
 

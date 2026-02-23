@@ -17,6 +17,12 @@ npm run db:migrate:local
 npm run dev
 ```
 
+로컬 D1에 테이블이 생성됐는지 확인:
+
+```bash
+wrangler d1 execute stamp-tourer-db --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+```
+
 ## 환경 설정
 
 1. `wrangler.toml`의 `database_id`를 실제 D1 DB ID로 교체합니다.
@@ -62,6 +68,12 @@ npm install
 npm run deploy
 ```
 
+원격 D1에 테이블이 생성됐는지 확인:
+
+```bash
+wrangler d1 execute stamp-tourer-db --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+```
+
 - `wrangler deploy`를 처음 실행할 때 Cloudflare 로그인/권한 확인이 필요할 수 있습니다.
 - 원격 마이그레이션 대상은 `wrangler.toml`의 `database_name`(`stamp-tourer-db`) 기준입니다.
 
@@ -70,6 +82,13 @@ npm run deploy
 - `GET /api/v1/health`
 - `GET /api/v1/tours`
 - `GET /api/v1/tours/:tourId`
+
+### 헬스체크 동작
+
+`GET /api/v1/health`는 필수 테이블(`users`, `tours`, `stamp_spots`) 존재 여부를 함께 확인합니다.
+
+- 스키마 정상: `200` + `{ success: true, data: { status: "ok", tables: [...] } }`
+- 스키마 누락: `500` + `DB_SCHEMA_MISSING` 에러 (누락 테이블 목록 포함)
 
 응답 포맷은 설계 문서의 envelope 정책을 따릅니다.
 
