@@ -9,7 +9,7 @@ ACCESS_TOKEN_TTL_SECONDS = "900"
 [[d1_databases]]
 binding = "DB"
 database_name = "stamp-tourer-db"
-database_id = "REPLACE_WITH_REAL_DATABASE_ID"
+database_id = "83540ba9-ffb2-4e9a-b87b-e0c880c08e94"
 migrations_dir = "migrations"
 
 [observability.logs]
