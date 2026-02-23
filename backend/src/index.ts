@@ -157,9 +157,10 @@ app.get('/api/v1/health', async (c) => {
 
 const listToursQuerySchema = z.object({
   keyword: z.string().max(100).optional(),
-  region: z.string().max(30).optional(),
   category: z.enum(['railway', 'sightseeing', 'festival', 'local', 'theme']).optional(),
-  status: z.enum(['planned', 'active', 'ended']).optional(),
+  regionCode: z.string().max(30).optional(),
+  period: z.enum(['active', 'always', 'upcoming']).optional(),
+  sortBy: z.enum(['popular', 'latest', 'review']).optional(),
 });
 
 const tourIdParamSchema = z.object({
@@ -206,25 +207,57 @@ app.get('/api/v1/tours', validateQuery(listToursQuerySchema), async (c) => {
     where.push('(title LIKE ? OR description LIKE ?)');
     params.push(`%${query.keyword}%`, `%${query.keyword}%`);
   }
-  if (query.region) {
+  if (query.regionCode) {
     where.push('region_code = ?');
-    params.push(query.region);
+    params.push(query.regionCode);
   }
   if (query.category) {
     where.push('category = ?');
     params.push(query.category);
   }
-  if (query.status) {
-    where.push('status = ?');
-    params.push(query.status);
+  if (query.period) {
+    where.push('period = ?');
+    params.push(query.period);
   }
 
   const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const orderClause =
+    query.sortBy === 'review'
+      ? 'ORDER BY t.review_score DESC NULLS LAST, t.created_at DESC'
+      : query.sortBy === 'latest'
+        ? 'ORDER BY t.created_at DESC'
+        : 'ORDER BY t.participants DESC, t.created_at DESC';
   const sql = `
-    SELECT id, title, description, category, region_code AS regionCode, status
+    SELECT
+      t.id,
+      t.title,
+      t.description,
+      t.category,
+      t.region_code AS regionCode,
+      t.difficulty,
+      t.duration,
+      t.budget,
+      t.period,
+      t.status,
+      t.review_score AS reviewScore,
+      t.participants,
+      t.reward,
+      t.estimated_hours AS estimatedHours,
+      t.estimated_cost AS estimatedCost,
+      t.organizer,
+      t.target_audience AS targetAudience,
+      t.thumbnail_emoji AS thumbnailEmoji,
+      COUNT(DISTINCT s.id) AS spotCount,
+      GROUP_CONCAT(DISTINCT vm.method) AS verificationMethods,
+      GROUP_CONCAT(DISTINCT tg.tag) AS tags
     FROM tours
+    t
+    LEFT JOIN stamp_spots s ON s.tour_id = t.id
+    LEFT JOIN tour_verification_methods vm ON vm.tour_id = t.id
+    LEFT JOIN tour_tags tg ON tg.tour_id = t.id
     ${whereClause}
-    ORDER BY updated_at DESC
+    GROUP BY t.id
+    ${orderClause}
     LIMIT 50
   `;
 
@@ -236,13 +269,55 @@ app.get('/api/v1/tours', validateQuery(listToursQuerySchema), async (c) => {
       description: string | null;
       category: string;
       regionCode: string;
+      difficulty: string | null;
+      duration: string | null;
+      budget: string | null;
+      period: string | null;
       status: string;
+      reviewScore: number | null;
+      participants: number | null;
+      reward: string | null;
+      estimatedHours: number | null;
+      estimatedCost: number | null;
+      organizer: string | null;
+      targetAudience: string | null;
+      thumbnailEmoji: string | null;
+      spotCount: number | null;
+      verificationMethods: string | null;
+      tags: string | null;
     }>();
+
+  const items = (result.results ?? []).map((tour) => ({
+    id: tour.id,
+    title: tour.title,
+    description: tour.description ?? '',
+    category: tour.category,
+    regionCode: tour.regionCode,
+    difficulty: tour.difficulty ?? 'beginner',
+    duration: tour.duration ?? 'day',
+    budget: tour.budget ?? 'low',
+    period: tour.period ?? 'active',
+    status: tour.status,
+    reviewScore: tour.reviewScore ?? 0,
+    participants: tour.participants ?? 0,
+    reward: tour.reward ?? '',
+    estimatedHours: tour.estimatedHours == null ? 0 : Math.round(tour.estimatedHours),
+    estimatedCost:
+      tour.estimatedCost == null
+        ? '₩0'
+        : `₩${new Intl.NumberFormat('ko-KR').format(Math.max(0, Math.round(tour.estimatedCost)))}`,
+    organizer: tour.organizer ?? '',
+    targetAudience: tour.targetAudience ?? '',
+    verificationMethods: tour.verificationMethods ? tour.verificationMethods.split(',') : [],
+    tags: tour.tags ? tour.tags.split(',') : [],
+    thumbnailEmoji: tour.thumbnailEmoji ?? '🧭',
+    spotCount: tour.spotCount ?? 0,
+  }));
 
   return c.json<ApiSuccess<{ items: unknown[] }>>({
     success: true,
     data: {
-      items: result.results,
+      items,
     },
   });
 });
