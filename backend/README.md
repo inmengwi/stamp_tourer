@@ -82,6 +82,11 @@ wrangler d1 execute stamp-tourer-db --remote --command "SELECT name FROM sqlite_
 - `GET /api/v1/health`
 - `GET /api/v1/tours`
 - `GET /api/v1/tours/:tourId`
+- `POST /api/v1/tours`
+- `POST /api/v1/tours/:tourId/participation`
+- `POST /api/v1/tours/:tourId/wishlist`
+- `POST /api/v1/stamps/records`
+- `GET /api/v1/collections/me`
 
 ### 헬스체크 동작
 
@@ -94,3 +99,25 @@ wrangler d1 execute stamp-tourer-db --remote --command "SELECT name FROM sqlite_
 
 - 성공: `{ "success": true, "data": ... }`
 - 실패: `{ "success": false, "error": { "code": "...", "message": "..." } }`
+
+
+## 상태 코드 정책 (MVP)
+
+- `400 Bad Request`: `zValidator` 기반 path/query/body 검증 실패.
+- `404 Not Found`: 참조한 투어/스팟이 존재하지 않을 때.
+- `409 Conflict`: 중복 참여/중복 찜/중복 스탬프 기록일 때.
+- `201 Created`: 생성형 요청(투어 등록, 참여 시작, 스탬프 기록) 성공 시.
+- `200 OK`: 조회 및 찜 상태 반영 성공 시.
+
+실패 응답은 항상 동일한 envelope를 사용합니다.
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "...",
+    "message": "...",
+    "details": {}
+  }
+}
+```
