@@ -39,7 +39,7 @@ Cloudflare 대시보드에서 코드 저장소를 연결하면, 브랜치 푸시
 4. Build/Deploy 설정에서:
    - **Root directory**: `backend`
    - **Build command**: (비워도 됨)
-   - **Deploy command**: `npx wrangler deploy`
+   - **Deploy command**: `npm run deploy`
 5. Worker 설정에서 D1 바인딩을 추가합니다.
    - **Binding name**: `DB`
    - **Database**: `stamp-tourer-db`
@@ -50,21 +50,9 @@ Cloudflare 대시보드에서 코드 저장소를 연결하면, 브랜치 푸시
    - Secret: `JWT_REFRESH_SECRET`
 7. Production 브랜치(예: `main`)를 지정하고 최초 배포를 실행합니다.
 
-> 참고: D1 마이그레이션은 배포 전/후로 별도 실행이 필요합니다(아래 2번).
+> 참고: `npm run deploy`는 원격 D1 마이그레이션을 먼저 적용한 뒤 Worker를 배포합니다.
 
-### 2) D1 마이그레이션 실행
-
-원격 D1 스키마 반영은 아래 명령으로 수행합니다.
-
-```bash
-cd backend
-npm install
-npm run db:migrate:remote
-```
-
-원격 마이그레이션 대상은 `wrangler.toml`의 `database_name`(`stamp-tourer-db`) 기준입니다.
-
-### 3) 로컬/CLI 직접 배포 (선택)
+### 2) 로컬/CLI 직접 배포 (선택)
 
 UI 연동 대신 수동 배포가 필요하면 아래를 사용합니다.
 
@@ -75,6 +63,7 @@ npm run deploy
 ```
 
 - `wrangler deploy`를 처음 실행할 때 Cloudflare 로그인/권한 확인이 필요할 수 있습니다.
+- 원격 마이그레이션 대상은 `wrangler.toml`의 `database_name`(`stamp-tourer-db`) 기준입니다.
 
 ## 현재 API
 
