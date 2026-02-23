@@ -27,6 +27,20 @@ wrangler secret put JWT_ACCESS_SECRET
 wrangler secret put JWT_REFRESH_SECRET
 ```
 
+## 배포 절차
+
+아래 순서대로 실행하면 Worker 생성(최초)과 배포까지 진행할 수 있습니다.
+
+```bash
+cd backend
+npm install
+npm run db:migrate:remote
+npm run deploy
+```
+
+- `wrangler deploy`를 처음 실행할 때 Cloudflare 로그인/권한 확인이 필요할 수 있습니다.
+- 원격 D1 마이그레이션 대상은 `wrangler.toml`의 `database_name`(`stamp-tourer-db`) 기준으로 맞춰두었습니다.
+
 ## 현재 API
 
 - `GET /api/v1/health`
