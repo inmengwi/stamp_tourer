@@ -27,3 +27,20 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## 백엔드 연결 설정
+
+프론트는 `VITE_API_BASE_URL` 환경변수로 API 서버를 선택합니다.
+
+- 기본값: `/api/v1`
+- 개발 권장: 기본값 유지 + `vite.config.js`의 `/api` 프록시 사용 (`http://localhost:8787` 전달)
+- 직접 연결 예시: `VITE_API_BASE_URL=http://localhost:8787/api/v1`
+- 운영 예시: `VITE_API_BASE_URL=https://<your-worker-domain>/api/v1`
+
+`.env.development` 예시:
+
+```bash
+VITE_API_BASE_URL=/api/v1
+```
+
+백엔드는 별도 터미널에서 `backend` 폴더 기준 `npm run dev`로 실행합니다.

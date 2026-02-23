@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
@@ -35,6 +36,15 @@ class AppHttpError extends HTTPException {
 }
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+app.use(
+  '/api/*',
+  cors({
+    origin: 'http://localhost:5173',
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
+  }),
+);
 
 const requiredTables = ['users', 'tours', 'stamp_spots', 'tour_participations', 'tour_wishlist', 'stamp_records'] as const;
 

@@ -1,4 +1,5 @@
 const DEFAULT_ERROR = '요청 처리 중 오류가 발생했습니다.';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 
 export class ApiRequestError extends Error {
   constructor(message, { status, code, details, traceId } = {}) {
@@ -42,7 +43,7 @@ export const apiRequest = async (path, { method = 'GET', query, body, headers, r
   const attemptRequest = async (attempt) => {
     let response;
     try {
-      response = await fetch(`/api/v1${path}${buildQuery(query)}`, {
+      response = await fetch(`${API_BASE_URL}${path}${buildQuery(query)}`, {
         method,
         headers: {
           'Content-Type': 'application/json',

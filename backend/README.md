@@ -17,6 +17,16 @@ npm run db:migrate:local
 npm run dev
 ```
 
+## 프론트엔드 연동 (개발 환경)
+
+- CORS는 개발 오리진 `http://localhost:5173`를 허용하도록 설정되어 있습니다.
+- 프론트엔드에서 `/api`로 시작하는 요청은 Vite 프록시를 통해 `http://localhost:8787`로 전달됩니다.
+- 따라서 프론트의 `VITE_API_BASE_URL`은 `/api/v1`(기본값) 사용을 권장합니다.
+
+동시 실행 시:
+1. 이 폴더에서 `npm run dev`로 API 서버를 8787 포트로 실행
+2. `frontend` 폴더에서 `npm run dev` 실행
+
 로컬 D1에 테이블이 생성됐는지 확인:
 
 ```bash
