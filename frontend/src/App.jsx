@@ -191,14 +191,12 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <header className="topbar"><h1>Stamp Tourer</h1></header>
-      <nav className="bottom-nav">
-        {pages.slice(0, 5).map((page) => (
-          <button key={page.key} className={currentPage === page.key ? 'active' : ''} onClick={() => setCurrentPage(page.key)}>{page.label}</button>
-        ))}
-      </nav>
+      <header className="top-bar">
+        <h1 className="top-bar-title">Stamp Tourer</h1>
+      </header>
 
-      {screens.action.error && <p className="helper">⚠️ {screens.action.error}</p>}
+      <div className="page-content">
+        {screens.action.error && <p className="helper">⚠️ {screens.action.error}</p>}
 
       {currentPage === 'discover' && (
         <section className="card">
@@ -282,7 +280,7 @@ export function App() {
         </section>
       )}
 
-      {currentPage === 'collect' && (
+        {currentPage === 'collect' && (
         <section className="card">
           <h2>스탬프 기록</h2>
           {screens.collect.error && <p>오류: {screens.collect.error} <button onClick={onSaveRecord}>재시도</button></p>}
@@ -295,7 +293,21 @@ export function App() {
           <button onClick={onSaveRecord} disabled={screens.collect.loading}>{screens.collect.loading ? '저장 중...' : '기록 저장'}</button>
           <ul className="list">{records.map((record) => <li key={record.id ?? `${record.spotId}-${record.acquiredAt}`}><strong>{record.spotName ?? record.spotId}</strong> - {record.memo}</li>)}</ul>
         </section>
-      )}
+        )}
+      </div>
+
+      <nav className="bottom-nav">
+        {pages.slice(0, 5).map((page) => (
+          <button
+            key={page.key}
+            type="button"
+            className={`bottom-nav-item ${currentPage === page.key ? 'is-active' : ''}`}
+            onClick={() => setCurrentPage(page.key)}
+          >
+            <span className="bottom-nav-label">{page.label}</span>
+          </button>
+        ))}
+      </nav>
     </main>
   );
 }
