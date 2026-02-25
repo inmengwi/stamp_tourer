@@ -19,7 +19,8 @@ npm run dev
 
 ## 프론트엔드 연동 (개발 환경)
 
-- CORS는 개발 오리진 `http://localhost:5173`를 허용하도록 설정되어 있습니다.
+- CORS는 기본 개발 오리진 `http://localhost:5173`를 허용합니다.
+- 추가 허용 오리진은 `CORS_ORIGINS` 환경 변수에 `,`로 구분해 설정할 수 있습니다. (예: `https://admin.example.com,https://app.example.com`)
 - 프론트엔드에서 `/api`로 시작하는 요청은 Vite 프록시를 통해 `http://localhost:8787`로 전달됩니다.
 - 따라서 프론트의 `VITE_API_BASE_URL`은 `/api/v1`(기본값) 사용을 권장합니다.
 
@@ -62,6 +63,7 @@ Cloudflare 대시보드에서 코드 저장소를 연결하면, 브랜치 푸시
 6. Worker 설정에서 환경 변수/시크릿을 추가합니다.
    - Variable: `JWT_ISSUER=stamp-tourer`
    - Variable: `ACCESS_TOKEN_TTL_SECONDS=900`
+   - Variable(optional): `CORS_ORIGINS=https://admin.example.com,https://app.example.com`
    - Secret: `JWT_ACCESS_SECRET`
    - Secret: `JWT_REFRESH_SECRET`
 7. Production 브랜치(예: `main`)를 지정하고 최초 배포를 실행합니다.

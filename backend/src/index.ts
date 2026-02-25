@@ -8,6 +8,7 @@ type Bindings = {
   DB: D1Database;
   JWT_ISSUER: string;
   ACCESS_TOKEN_TTL_SECONDS: string;
+  CORS_ORIGINS?: string;
 };
 
 type ApiSuccess<T> = {
@@ -37,10 +38,29 @@ class AppHttpError extends HTTPException {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+const defaultCorsOrigins = ['http://localhost:5173'];
+
+const getAllowedCorsOrigins = (rawOrigins?: string): string[] => {
+  const envOrigins =
+    rawOrigins
+      ?.split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0) ?? [];
+
+  return [...new Set([...defaultCorsOrigins, ...envOrigins])];
+};
+
 app.use(
   '/api/*',
   cors({
-    origin: 'http://localhost:5173',
+    origin: (requestOrigin, c) => {
+      if (!requestOrigin) {
+        return '';
+      }
+
+      const allowedOrigins = getAllowedCorsOrigins(c.env.CORS_ORIGINS);
+      return allowedOrigins.includes(requestOrigin) ? requestOrigin : '';
+    },
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
   }),
