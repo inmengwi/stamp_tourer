@@ -7,6 +7,6 @@ export const completeTourParticipation = (tourId) =>
 
 export const toggleTourWishlist = (tourId, wished) =>
   apiRequest(`/tours/${tourId}/wishlist`, {
-    method: 'PUT',
+    method: 'POST',
     body: { wished },
   });
