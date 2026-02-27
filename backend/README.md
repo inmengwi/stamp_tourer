@@ -57,7 +57,7 @@ Cloudflare 대시보드에서 코드 저장소를 연결하면, 브랜치 푸시
 4. Build/Deploy 설정에서:
    - **Root directory**: `backend`
    - **Build command**: (비워도 됨)
-   - **Deploy command**: `npm run deploy`
+   - **Deploy command**: `npm run deploy` (**주의**: `npx wrangler deploy`를 사용하면 D1 마이그레이션이 적용되지 않아 `no such table` 오류가 발생합니다)
 5. Worker 설정에서 D1 바인딩을 추가합니다.
    - **Binding name**: `DB`
    - **Database**: `stamp-tourer-db`
