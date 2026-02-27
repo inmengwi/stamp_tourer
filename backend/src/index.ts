@@ -59,10 +59,26 @@ app.use(
       }
 
       const allowedOrigins = getAllowedCorsOrigins(c.env.CORS_ORIGINS);
-      return allowedOrigins.includes(requestOrigin) ? requestOrigin : '';
+
+      if (allowedOrigins.includes(requestOrigin)) {
+        return requestOrigin;
+      }
+
+      // Support wildcard subdomain patterns (e.g. https://*.pages.dev)
+      for (const pattern of allowedOrigins) {
+        if (pattern.includes('*')) {
+          const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[a-z0-9-]+');
+          if (new RegExp(`^${escaped}$`).test(requestOrigin)) {
+            return requestOrigin;
+          }
+        }
+      }
+
+      return '';
     },
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
+    maxAge: 600,
   }),
 );
 

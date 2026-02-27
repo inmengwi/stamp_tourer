@@ -5,7 +5,7 @@ compatibility_date = "2025-02-20"
 [vars]
 JWT_ISSUER = "stamp-tourer"
 ACCESS_TOKEN_TTL_SECONDS = "900"
-CORS_ORIGINS = "https://stamp-tourer.pages.dev"
+CORS_ORIGINS = "https://stamp-tourer.pages.dev,https://*.stamp-tourer.pages.dev"
 
 [[d1_databases]]
 binding = "DB"

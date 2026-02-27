@@ -43,12 +43,13 @@ export const apiRequest = async (path, { method = 'GET', query, body, headers, r
   const attemptRequest = async (attempt) => {
     let response;
     try {
+      const requestHeaders = { ...headers };
+      if (body) {
+        requestHeaders['Content-Type'] = 'application/json';
+      }
       response = await fetch(`${API_BASE_URL}${path}${buildQuery(query)}`, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...headers,
-        },
+        headers: requestHeaders,
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (error) {
