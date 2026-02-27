@@ -177,12 +177,14 @@ app.onError((err, c) => {
     );
   }
 
+  const errorMessage = err instanceof Error ? err.message : String(err);
+
   console.error(
     JSON.stringify({
       level: 'error',
       traceId,
       type: 'UnhandledError',
-      message: err instanceof Error ? err.message : String(err),
+      message: errorMessage,
       stack: err instanceof Error ? err.stack : undefined,
       name: err instanceof Error ? err.name : undefined,
       method: c.req.method,
@@ -191,6 +193,20 @@ app.onError((err, c) => {
       userId: c.req.header('x-user-id') ?? null,
     }),
   );
+
+  if (/no such table:\s*\S+/i.test(errorMessage)) {
+    return c.json<ApiError>(
+      {
+        success: false,
+        error: {
+          code: 'DB_SCHEMA_MISSING',
+          message: 'D1 스키마가 적용되지 않았습니다. 마이그레이션을 실행하세요.',
+          traceId,
+        },
+      },
+      500,
+    );
+  }
 
   return c.json<ApiError>(
     {

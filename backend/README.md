@@ -13,9 +13,10 @@ Stamp Tourer MVP의 백엔드 API 초기 스캐폴드입니다.
 ```bash
 cd backend
 npm install
-npm run db:migrate:local
 npm run dev
 ```
+
+> `npm run dev`는 로컬 D1 마이그레이션을 자동 적용한 뒤 개발 서버를 실행합니다.
 
 ## 프론트엔드 연동 (개발 환경)
 
