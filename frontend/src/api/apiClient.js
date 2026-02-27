@@ -43,7 +43,7 @@ export const apiRequest = async (path, { method = 'GET', query, body, headers, r
   const attemptRequest = async (attempt) => {
     let response;
     try {
-      const requestHeaders = { ...headers };
+      const requestHeaders = { Accept: 'application/json', ...headers };
       if (body) {
         requestHeaders['Content-Type'] = 'application/json';
       }
