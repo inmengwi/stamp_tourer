@@ -22,6 +22,7 @@ type ApiError = {
     code: string;
     message: string;
     details?: unknown;
+    traceId?: string;
   };
 };
 
@@ -36,7 +37,11 @@ class AppHttpError extends HTTPException {
   }
 }
 
-const app = new Hono<{ Bindings: Bindings }>();
+type Variables = {
+  traceId: string;
+};
+
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const defaultCorsOrigins = ['http://localhost:5173'];
 
@@ -81,6 +86,11 @@ app.use(
     maxAge: 600,
   }),
 );
+
+app.use('/api/*', async (c, next) => {
+  c.set('traceId', crypto.randomUUID());
+  await next();
+});
 
 const requiredTables = ['users', 'tours', 'stamp_spots', 'tour_participations', 'tour_wishlist', 'stamp_records'] as const;
 
@@ -136,22 +146,51 @@ const assertTourExists = async (db: D1Database, tourId: string) => {
 };
 
 app.onError((err, c) => {
+  const traceId = c.get('traceId') ?? 'unknown';
+
   if (err instanceof AppHttpError) {
     return c.json<ApiError>({ success: false, error: err.payload }, err.status);
   }
 
   if (err instanceof HTTPException) {
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        traceId,
+        type: 'HTTPException',
+        status: err.status,
+        message: err.message,
+        method: c.req.method,
+        path: c.req.path,
+      }),
+    );
     return c.json<ApiError>(
       {
         success: false,
         error: {
           code: 'HTTP_ERROR',
           message: err.message,
+          traceId,
         },
       },
       err.status,
     );
   }
+
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      traceId,
+      type: 'UnhandledError',
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      name: err instanceof Error ? err.name : undefined,
+      method: c.req.method,
+      path: c.req.path,
+      query: c.req.query(),
+      userId: c.req.header('x-user-id') ?? null,
+    }),
+  );
 
   return c.json<ApiError>(
     {
@@ -159,6 +198,7 @@ app.onError((err, c) => {
       error: {
         code: 'INTERNAL_SERVER_ERROR',
         message: '예상치 못한 오류가 발생했습니다.',
+        traceId,
       },
     },
     500,
