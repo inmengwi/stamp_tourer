@@ -356,6 +356,36 @@ const createTourBodySchema = z.object({
   category: z.enum(['railway', 'sightseeing', 'festival', 'local', 'theme']),
   regionCode: z.string().min(1).max(30),
   status: z.enum(['planned', 'active', 'ended']).default('planned'),
+  difficulty: z.string().max(30).optional(),
+  duration: z.string().max(30).optional(),
+  budget: z.string().max(30).optional(),
+  period: z.string().max(30).optional(),
+  reward: z.string().max(200).optional(),
+  estimatedHours: z.number().min(0).optional(),
+  estimatedCost: z.union([z.string(), z.number()]).optional(),
+  organizer: z.string().max(100).optional(),
+  targetAudience: z.string().max(100).optional(),
+  thumbnailEmoji: z.string().max(10).optional(),
+  verificationMethods: z.array(z.enum(['manual', 'gps', 'qr', 'photo'])).optional(),
+  spots: z.array(z.object({
+    id: z.string().optional(),
+    name: z.string().min(1).max(120),
+    address: z.string().max(200).optional(),
+    openHours: z.string().max(100).optional(),
+    description: z.string().max(500).optional(),
+    verificationTypes: z.array(z.string()).optional(),
+  })).optional(),
+  milestones: z.array(z.object({
+    stampCount: z.number().optional(),
+    reward: z.string().max(200),
+  })).optional(),
+  notices: z.array(z.string().max(500)).optional(),
+  tags: z.array(z.string().max(50)).optional(),
+  contactInfo: z.object({
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    website: z.string().optional(),
+  }).optional(),
 });
 
 const participationBodySchema = z.object({
@@ -567,12 +597,13 @@ app.get('/api/v1/tours', validateQuery(listToursQuerySchema), async (c) => {
       t.organizer,
       t.target_audience AS targetAudience,
       t.thumbnail_emoji AS thumbnailEmoji,
-      COUNT(DISTINCT s.id) AS spotCount,
+      (COUNT(DISTINCT s.id) + COUNT(DISTINCT ts.id)) AS spotCount,
       GROUP_CONCAT(DISTINCT vm.method) AS verificationMethods,
       GROUP_CONCAT(DISTINCT tg.tag) AS tags
     FROM tours
     t
     LEFT JOIN stamp_spots s ON s.tour_id = t.id
+    LEFT JOIN tour_spots ts ON ts.tour_id = t.id
     LEFT JOIN tour_verification_methods vm ON vm.tour_id = t.id
     LEFT JOIN tour_tags tg ON tg.tour_id = t.id
     ${whereClause}
@@ -647,12 +678,91 @@ app.post('/api/v1/tours', validateJson(createTourBodySchema), async (c) => {
   const now = Date.now();
   const id = crypto.randomUUID();
 
+  const estimatedCostNum =
+    body.estimatedCost == null
+      ? null
+      : typeof body.estimatedCost === 'number'
+        ? body.estimatedCost
+        : parseInt(String(body.estimatedCost), 10) || null;
+
+  // Insert tour with all columns
   await c.env.DB.prepare(
-    `INSERT INTO tours (id, title, description, category, region_code, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tours (id, title, description, category, region_code, status,
+       difficulty, duration, budget, period, reward,
+       estimated_hours, estimated_cost, organizer, target_audience, thumbnail_emoji,
+       created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, body.title, body.description ?? null, body.category, body.regionCode, body.status, now, now)
+    .bind(
+      id, body.title, body.description ?? null, body.category, body.regionCode, body.status,
+      body.difficulty ?? null, body.duration ?? null, body.budget ?? null, body.period ?? null, body.reward ?? null,
+      body.estimatedHours ?? null, estimatedCostNum, body.organizer ?? null, body.targetAudience ?? null, body.thumbnailEmoji ?? null,
+      now, now,
+    )
     .run();
+
+  // Insert spots into tour_spots
+  const spots: Array<{ id: string; name: string; description: string | null; address: string | null; openHours: string | null }> = [];
+  if (body.spots?.length) {
+    const stmts = body.spots.map((spot, idx) => {
+      const spotId = spot.id || crypto.randomUUID();
+      spots.push({ id: spotId, name: spot.name, description: spot.description ?? null, address: spot.address ?? null, openHours: spot.openHours ?? null });
+      return c.env.DB.prepare(
+        `INSERT INTO tour_spots (id, tour_id, name, description, address, operation_hours, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(spotId, id, spot.name, spot.description ?? null, spot.address ?? null, spot.openHours ?? null, idx, now, now);
+    });
+    await c.env.DB.batch(stmts);
+  }
+
+  // Insert milestones into tour_milestones
+  const milestones: Array<{ stampCount: number | null; reward: string }> = [];
+  if (body.milestones?.length) {
+    const stmts = body.milestones.map((m, idx) => {
+      milestones.push({ stampCount: m.stampCount ?? null, reward: m.reward });
+      return c.env.DB.prepare(
+        `INSERT INTO tour_milestones (id, tour_id, title, reward, target_count, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(crypto.randomUUID(), id, m.reward, m.reward, m.stampCount ?? null, idx, now, now);
+    });
+    await c.env.DB.batch(stmts);
+  }
+
+  // Insert notices into tour_notices
+  const notices: string[] = [];
+  if (body.notices?.length) {
+    const stmts = body.notices.map((n) => {
+      notices.push(n);
+      return c.env.DB.prepare(
+        `INSERT INTO tour_notices (id, tour_id, title, content, is_pinned, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?)`,
+      ).bind(crypto.randomUUID(), id, n, n, now, now);
+    });
+    await c.env.DB.batch(stmts);
+  }
+
+  // Insert verification methods
+  if (body.verificationMethods?.length) {
+    const stmts = body.verificationMethods.map((method) =>
+      c.env.DB.prepare(
+        `INSERT INTO tour_verification_methods (id, tour_id, method, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).bind(crypto.randomUUID(), id, method, now, now),
+    );
+    await c.env.DB.batch(stmts);
+  }
+
+  // Insert tags
+  const tags: string[] = [];
+  if (body.tags?.length) {
+    const stmts = body.tags.map((tag) => {
+      tags.push(tag);
+      return c.env.DB.prepare(
+        `INSERT INTO tour_tags (id, tour_id, tag, created_at) VALUES (?, ?, ?, ?)`,
+      ).bind(crypto.randomUUID(), id, tag, now);
+    });
+    await c.env.DB.batch(stmts);
+  }
 
   return c.json<ApiSuccess<{ tour: unknown }>>(
     {
@@ -665,6 +775,23 @@ app.post('/api/v1/tours', validateJson(createTourBodySchema), async (c) => {
           category: body.category,
           regionCode: body.regionCode,
           status: body.status,
+          difficulty: body.difficulty ?? null,
+          duration: body.duration ?? null,
+          budget: body.budget ?? null,
+          period: body.period ?? null,
+          reward: body.reward ?? null,
+          estimatedHours: body.estimatedHours ?? null,
+          estimatedCost: estimatedCostNum,
+          organizer: body.organizer ?? null,
+          targetAudience: body.targetAudience ?? null,
+          thumbnailEmoji: body.thumbnailEmoji ?? null,
+          participants: 0,
+          reviewScore: null,
+          spots,
+          milestones,
+          notices,
+          tags,
+          verificationMethods: body.verificationMethods ?? [],
         },
       },
     },
@@ -676,7 +803,11 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
   const { tourId } = c.req.valid('param');
 
   const tour = await c.env.DB.prepare(
-    `SELECT id, title, description, category, region_code AS regionCode, status
+    `SELECT id, title, description, category, region_code AS regionCode, status,
+            difficulty, duration, budget, period, reward,
+            estimated_hours AS estimatedHours, estimated_cost AS estimatedCost,
+            organizer, target_audience AS targetAudience,
+            thumbnail_emoji AS thumbnailEmoji, participants, review_score AS reviewScore
      FROM tours
      WHERE id = ?`,
   )
@@ -688,6 +819,18 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
       category: string;
       regionCode: string;
       status: string;
+      difficulty: string | null;
+      duration: string | null;
+      budget: string | null;
+      period: string | null;
+      reward: string | null;
+      estimatedHours: number | null;
+      estimatedCost: number | null;
+      organizer: string | null;
+      targetAudience: string | null;
+      thumbnailEmoji: string | null;
+      participants: number | null;
+      reviewScore: number | null;
     }>();
 
   if (!tour) {
@@ -698,28 +841,102 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
     });
   }
 
-  const spotsResult = await c.env.DB.prepare(
-    `SELECT id, name, address, operation_hours AS operationHours, verification_type AS verificationType
-     FROM stamp_spots
+  // Query tour_spots first, fall back to stamp_spots for legacy data
+  const tourSpotsResult = await c.env.DB.prepare(
+    `SELECT id, name, description, address, operation_hours AS openHours
+     FROM tour_spots
      WHERE tour_id = ?
-     ORDER BY created_at ASC`,
+     ORDER BY sort_order ASC, created_at ASC`,
   )
     .bind(tourId)
     .all<{
       id: string;
       name: string;
+      description: string | null;
       address: string | null;
-      operationHours: string | null;
-      verificationType: 'manual' | 'gps' | 'qr' | 'photo';
+      openHours: string | null;
     }>();
 
-  const spots = (spotsResult.results ?? []).map((spot) => ({
-    id: spot.id,
-    name: spot.name,
-    address: spot.address,
-    openHours: spot.operationHours,
-    verificationTypes: [spot.verificationType],
-  }));
+  let spots: Array<{ id: string; name: string; description: string | null; address: string | null; openHours: string | null }>;
+  if ((tourSpotsResult.results ?? []).length > 0) {
+    spots = (tourSpotsResult.results ?? []).map((spot) => ({
+      id: spot.id,
+      name: spot.name,
+      description: spot.description,
+      address: spot.address,
+      openHours: spot.openHours,
+    }));
+  } else {
+    // Fallback to legacy stamp_spots table
+    const legacySpotsResult = await c.env.DB.prepare(
+      `SELECT id, name, address, operation_hours AS openHours, verification_type AS verificationType
+       FROM stamp_spots
+       WHERE tour_id = ?
+       ORDER BY created_at ASC`,
+    )
+      .bind(tourId)
+      .all<{
+        id: string;
+        name: string;
+        address: string | null;
+        openHours: string | null;
+        verificationType: string | null;
+      }>();
+    spots = (legacySpotsResult.results ?? []).map((spot) => ({
+      id: spot.id,
+      name: spot.name,
+      description: null,
+      address: spot.address,
+      openHours: spot.openHours,
+    }));
+  }
+
+  // Query milestones from tour_milestones, fall back to defaults
+  const milestonesResult = await c.env.DB.prepare(
+    `SELECT target_count AS stampCount, reward
+     FROM tour_milestones
+     WHERE tour_id = ?
+     ORDER BY sort_order ASC, created_at ASC`,
+  )
+    .bind(tourId)
+    .all<{ stampCount: number | null; reward: string }>();
+
+  const milestones = (milestonesResult.results ?? []).length > 0
+    ? milestonesResult.results!
+    : [
+        { stampCount: 1, reward: '첫 인증 배지' },
+        { stampCount: Math.max(spots.length, 3), reward: '투어 완주 배지' },
+      ];
+
+  // Query notices from tour_notices, fall back to defaults
+  const noticesResult = await c.env.DB.prepare(
+    `SELECT content FROM tour_notices WHERE tour_id = ? ORDER BY created_at ASC`,
+  )
+    .bind(tourId)
+    .all<{ content: string }>();
+
+  const notices = (noticesResult.results ?? []).length > 0
+    ? (noticesResult.results!).map((n) => n.content)
+    : [
+        '운영시간 외에는 스탬프 적립이 제한될 수 있습니다.',
+        '현장 상황에 따라 스팟 접근이 제한될 수 있습니다.',
+      ];
+
+  // Query tags
+  const tagsResult = await c.env.DB.prepare(
+    `SELECT tag FROM tour_tags WHERE tour_id = ? ORDER BY created_at ASC`,
+  )
+    .bind(tourId)
+    .all<{ tag: string }>();
+  const tags = (tagsResult.results ?? []).map((t) => t.tag);
+
+  // Query verification methods
+  const vmResult = await c.env.DB.prepare(
+    `SELECT DISTINCT method FROM tour_verification_methods WHERE tour_id = ?`,
+  )
+    .bind(tourId)
+    .all<{ method: string }>();
+  const verificationMethods = (vmResult.results ?? []).map((v) => v.method);
 
   return c.json<ApiSuccess<{ tour: unknown }>>({
     success: true,
@@ -727,14 +944,10 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
       tour: {
         ...tour,
         spots,
-        milestones: [
-          { stampCount: 1, reward: '첫 인증 배지' },
-          { stampCount: Math.max(spots.length, 3), reward: '투어 완주 배지' },
-        ],
-        notices: [
-          '운영시간 외에는 스탬프 적립이 제한될 수 있습니다.',
-          '현장 상황에 따라 스팟 접근이 제한될 수 있습니다.',
-        ],
+        milestones,
+        notices,
+        tags,
+        verificationMethods,
       },
     },
   });
