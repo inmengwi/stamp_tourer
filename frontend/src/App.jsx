@@ -77,6 +77,11 @@ export function App() {
   const [editMilestones, setEditMilestones] = useState([]);
   const [editNotices, setEditNotices] = useState([]);
 
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const openMenu = () => setIsMenuOpen(true);
+  const closeMenu = () => setIsMenuOpen(false);
+  const handleMenuItemClick = (action) => { closeMenu(); action(); };
+
   const [screens, setScreens] = useState({
     discover: makeState(),
     detail: makeState(),
@@ -390,7 +395,30 @@ export function App() {
     <main className="app-shell">
       <header className="top-bar">
         <h1 className="top-bar-title">Stamp Tourer</h1>
+        <button className="menu-btn" aria-label="메뉴 열기" onClick={openMenu}>☰</button>
       </header>
+
+      <div className={`menu-overlay${isMenuOpen ? ' is-open' : ''}`} onClick={closeMenu} />
+      <nav className={`side-menu${isMenuOpen ? ' is-open' : ''}`} aria-label="메인 메뉴">
+        <div className="side-menu-header">
+          <h2 className="side-menu-title">메뉴</h2>
+          <button className="side-menu-close" onClick={closeMenu}>✕</button>
+        </div>
+        <ul className="side-menu-list">
+          <li><button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('plan'))}>
+            <span className="side-menu-icon">🗺️</span>진행 중 투어
+          </button></li>
+          <li><button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('wishlist'))}>
+            <span className="side-menu-icon">♥</span>위시리스트
+          </button></li>
+          <li><button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('collect'))}>
+            <span className="side-menu-icon">📝</span>기록
+          </button></li>
+          <li><button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('discover'))}>
+            <span className="side-menu-icon">⚙️</span>설정
+          </button></li>
+        </ul>
+      </nav>
 
       <div className="page-content">
         {screens.action.error && <p className="helper">⚠️ {screens.action.error}</p>}
