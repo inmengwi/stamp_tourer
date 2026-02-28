@@ -1028,6 +1028,17 @@ app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), as
     ? `투어 이름: ${name}\n투어 설명: ${description}`
     : `투어 이름: ${name}`;
 
+  console.log(
+    JSON.stringify({
+      level: 'debug',
+      type: 'AISearchRequest',
+      provider,
+      model,
+      userMessage,
+      traceId: c.get('traceId'),
+    }),
+  );
+
   let aiResponseText: string;
   try {
     aiResponseText = await callAI(provider, model, apiKey, TOUR_SEARCH_SYSTEM_PROMPT, userMessage);
@@ -1048,6 +1059,16 @@ app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), as
     });
   }
 
+  console.log(
+    JSON.stringify({
+      level: 'debug',
+      type: 'AISearchRawResponse',
+      responseLength: aiResponseText.length,
+      rawResponse: aiResponseText.slice(0, 2000),
+      traceId: c.get('traceId'),
+    }),
+  );
+
   let parsed: unknown;
   try {
     parsed = extractJSON(aiResponseText);
@@ -1066,6 +1087,15 @@ app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), as
     });
   }
 
+  console.log(
+    JSON.stringify({
+      level: 'debug',
+      type: 'AISearchParsedJSON',
+      parsed,
+      traceId: c.get('traceId'),
+    }),
+  );
+
   const validation = aiTourResponseSchema.safeParse(parsed);
   if (!validation.success) {
     console.error(
@@ -1081,6 +1111,17 @@ app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), as
       message: 'AI 응답이 올바른 형식이 아닙니다. 다시 시도해주세요.',
     });
   }
+
+  console.log(
+    JSON.stringify({
+      level: 'debug',
+      type: 'AISearchValidated',
+      spotsCount: validation.data.spots.length,
+      title: validation.data.title,
+      category: validation.data.category,
+      traceId: c.get('traceId'),
+    }),
+  );
 
   return c.json<ApiSuccess<{ tour: z.infer<typeof aiTourResponseSchema> }>>({
     success: true,
