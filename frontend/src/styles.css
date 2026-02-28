@@ -3,37 +3,41 @@
   font-family: Pretendard, system-ui, -apple-system, sans-serif;
   --app-max-width: 480px;
 
-  /* Colors */
-  --color-primary: #2563eb;
-  --color-primary-dark: #1d4ed8;
-  --color-primary-light: #93c5fd;
-  --color-primary-bg: #eff6ff;
+  /* Colors — Korean Aesthetic (남색·한지·주홍·청자) */
+  --color-primary: #2C3E6B;
+  --color-primary-dark: #1E2D4F;
+  --color-primary-light: #8BA3C7;
+  --color-primary-bg: #EDF1F7;
 
-  --color-text: #111827;
-  --color-text-dark: #374151;
-  --color-text-secondary: #4b5563;
-  --color-text-muted: #6b7280;
+  --color-accent: #C24B3A;
+  --color-accent-dark: #A83D2E;
+  --color-accent-bg: #F8EFED;
 
-  --color-bg: #f3f4f6;
-  --color-bg-light: #f9fafb;
-  --color-surface: #fff;
+  --color-text: #1A1A18;
+  --color-text-dark: #3B3B38;
+  --color-text-secondary: #5C5C58;
+  --color-text-muted: #8A8A85;
 
-  --color-border: #e5e7eb;
-  --color-border-dark: #d1d5db;
+  --color-bg: #F5F2EC;
+  --color-bg-light: #FAF8F4;
+  --color-surface: #FEFCF9;
 
-  --color-success: #16a34a;
-  --color-success-light: #86efac;
-  --color-success-bg: #f0fdf4;
-  --color-success-bg-deep: #dcfce7;
+  --color-border: #DED9D0;
+  --color-border-dark: #C8C3BA;
 
-  --color-danger: #dc2626;
-  --color-danger-light: #fca5a5;
-  --color-danger-bg: #fef2f2;
-  --color-required: #ef4444;
+  --color-success: #5A8A7A;
+  --color-success-light: #A3C9BD;
+  --color-success-bg: #EFF7F3;
+  --color-success-bg-deep: #D6EDE4;
 
-  /* Shadows */
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.06);
-  --shadow-app: 0 8px 28px rgba(15, 23, 42, 0.08);
+  --color-danger: #B5463A;
+  --color-danger-light: #D4A09A;
+  --color-danger-bg: #F8EFED;
+  --color-required: #C24B3A;
+
+  /* Shadows — warm tone */
+  --shadow-card: 0 2px 8px rgba(60, 45, 30, 0.06);
+  --shadow-app: 0 4px 20px rgba(60, 45, 30, 0.08);
 
   color: var(--color-text);
   background: var(--color-bg);
@@ -65,16 +69,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   height: 56px;
-  background: var(--color-primary);
-  color: var(--color-surface);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
 .top-bar-title {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.5px;
   margin: 0;
 }
 
@@ -86,11 +92,11 @@ body {
   padding: 6px;
   line-height: 1;
   border-radius: 50%;
-  color: var(--color-surface);
+  color: var(--color-primary);
 }
 
 .menu-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-primary-bg);
 }
 
 /* ---- Bottom Navigation ---- */
@@ -148,7 +154,7 @@ body {
 .page-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 20px;
 }
 
 /* ---- Form Controls ---- */
@@ -171,8 +177,8 @@ select {
 /* ---- Cards & Content ---- */
 .card {
   background: var(--color-surface);
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 12px;
+  padding: 20px;
   box-shadow: var(--shadow-card);
 }
 
@@ -300,14 +306,14 @@ progress {
 .detail-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   padding-bottom: 80px;
 }
 
 .detail-header {
   background: var(--color-surface);
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 12px;
+  padding: 20px;
   box-shadow: var(--shadow-card);
   text-align: center;
 }
@@ -411,8 +417,8 @@ progress {
 /* Detail Sections */
 .detail-section {
   background: var(--color-surface);
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 12px;
+  padding: 20px;
   box-shadow: var(--shadow-card);
 }
 
@@ -722,15 +728,15 @@ progress {
   padding: 12px;
   border: none;
   border-radius: 10px;
-  background: var(--color-primary);
-  color: var(--color-surface);
+  background: var(--color-accent);
+  color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .action-join:hover {
-  background: var(--color-primary-dark);
+  background: var(--color-accent-dark);
 }
 
 /* ---- Register Page ---- */
@@ -783,15 +789,15 @@ progress {
   padding: 12px;
   border: none;
   border-radius: 10px;
-  background: var(--color-primary);
-  color: var(--color-surface);
+  background: var(--color-accent);
+  color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .btn-search:hover {
-  background: var(--color-primary-dark);
+  background: var(--color-accent-dark);
 }
 
 .btn-manual {
@@ -856,7 +862,7 @@ progress {
   width: 40px;
   height: 40px;
   border: 4px solid var(--color-border);
-  border-top-color: var(--color-primary);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   margin: 0 auto;
   animation: spin 0.8s linear infinite;
@@ -1054,23 +1060,25 @@ progress {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   height: 56px;
-  background: var(--color-primary);
-  color: var(--color-surface);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
 .side-menu-title {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.5px;
   margin: 0;
 }
 
 .side-menu-close {
   background: none;
   border: none;
-  color: var(--color-surface);
+  color: var(--color-primary);
   font-size: 20px;
   cursor: pointer;
   padding: 6px;
@@ -1079,7 +1087,7 @@ progress {
 }
 
 .side-menu-close:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-primary-bg);
 }
 
 .side-menu-list {

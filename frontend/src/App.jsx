@@ -14,12 +14,12 @@ import { completeTourParticipation, joinTour, toggleTourWishlist } from './api/p
 import { createStampRecord } from './api/stampsApi';
 
 const pages = [
-  { key: 'discover', label: '탐색' },
-  { key: 'register', label: '등록' },
-  { key: 'plan', label: '내 투어' },
-  { key: 'wishlist', label: '위시리스트' },
-  { key: 'collect', label: '기록' },
-  { key: 'detail', label: '상세' },
+  { key: 'discover', label: '탐색', icon: '\uD83D\uDD0D' },
+  { key: 'register', label: '등록', icon: '\u2795' },
+  { key: 'plan', label: '내 투어', icon: '\uD83D\uDDFA\uFE0F' },
+  { key: 'wishlist', label: '위시리스트', icon: '\u2665' },
+  { key: 'collect', label: '기록', icon: '\uD83D\uDCDD' },
+  { key: 'detail', label: '상세', icon: '\uD83D\uDCCB' },
 ];
 
 const emptyForm = () => ({
@@ -833,6 +833,7 @@ export function App() {
             className={`bottom-nav-item ${currentPage === page.key ? 'is-active' : ''}`}
             onClick={() => setCurrentPage(page.key)}
           >
+            <span className="bottom-nav-icon">{page.icon}</span>
             <span className="bottom-nav-label">{page.label}</span>
           </button>
         ))}
