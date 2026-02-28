@@ -9,7 +9,7 @@ import {
   SORT_OPTIONS,
   VERIFICATION_OPTIONS,
 } from './data';
-import { createTour, getTourDetail, getTours } from './api/toursApi';
+import { createTour, getTourDetail, getTours, searchTourOnline } from './api/toursApi';
 import { completeTourParticipation, joinTour, toggleTourWishlist } from './api/participationApi';
 import { createStampRecord } from './api/stampsApi';
 import { getSchedules, upsertSchedule } from './api/schedulesApi';
@@ -333,44 +333,54 @@ export function App() {
     return tour.spots ?? [];
   };
 
-  const searchOnline = () => {
+  const searchOnline = async () => {
     if (!searchName.trim()) {
       alert('투어 이름을 입력해주세요.');
       return;
     }
     setRegisterStep('loading');
-    setTimeout(() => {
+
+    const applyTourData = (t) => {
+      setRegisterForm({
+        title: t.title,
+        description: t.description,
+        category: t.category,
+        regionCode: t.regionCode,
+        difficulty: t.difficulty,
+        duration: t.duration,
+        budget: t.budget,
+        period: t.period,
+        status: t.status,
+        reward: t.reward,
+        estimatedHours: t.estimatedHours,
+        estimatedCost: t.estimatedCost,
+        organizer: t.organizer,
+        targetAudience: t.targetAudience,
+        verificationMethods: [...(t.verificationMethods || ['manual'])],
+        contactPhone: t.contactInfo?.phone || '',
+        contactEmail: t.contactInfo?.email || '',
+        contactWebsite: t.contactInfo?.website || '',
+        tags: (t.tags || []).join(', '),
+        thumbnailEmoji: t.thumbnailEmoji || '📍',
+      });
+      const spotsFromResult = extractSpotsFromTour(t);
+      setEditSpots(spotsFromResult.map((s) => ({ ...s, id: crypto.randomUUID() })));
+      setOnlineStructure(t.subTours ?? []);
+      setEditMilestones(t.milestones ? [...t.milestones] : []);
+      setEditNotices(t.notices ? [...t.notices] : []);
+    };
+
+    try {
+      const data = await searchTourOnline(searchName, searchDesc);
+      applyTourData(data.tour);
+    } catch (error) {
+      console.warn('AI search failed, falling back to local DB:', error.message);
       const query = `${searchName} ${searchDesc}`.toLowerCase();
-      const match = ONLINE_TOUR_DB.find((entry) => entry.keywords.some((kw) => query.includes(kw)));
+      const match = ONLINE_TOUR_DB.find((entry) =>
+        entry.keywords.some((kw) => query.includes(kw)),
+      );
       if (match) {
-        const t = match.tour;
-        setRegisterForm({
-          title: t.title,
-          description: t.description,
-          category: t.category,
-          regionCode: t.regionCode,
-          difficulty: t.difficulty,
-          duration: t.duration,
-          budget: t.budget,
-          period: t.period,
-          status: t.status,
-          reward: t.reward,
-          estimatedHours: t.estimatedHours,
-          estimatedCost: t.estimatedCost,
-          organizer: t.organizer,
-          targetAudience: t.targetAudience,
-          verificationMethods: [...t.verificationMethods],
-          contactPhone: t.contactInfo.phone,
-          contactEmail: t.contactInfo.email,
-          contactWebsite: t.contactInfo.website,
-          tags: t.tags.join(', '),
-          thumbnailEmoji: t.thumbnailEmoji,
-        });
-        const spotsFromResult = extractSpotsFromTour(t);
-        setEditSpots(spotsFromResult.map((s) => ({ ...s, id: crypto.randomUUID() })));
-        setOnlineStructure(t.subTours ?? []);
-        setEditMilestones([...t.milestones]);
-        setEditNotices([...t.notices]);
+        applyTourData(match.tour);
       } else {
         setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
         setEditSpots([]);
@@ -378,8 +388,9 @@ export function App() {
         setEditMilestones([]);
         setEditNotices([]);
       }
-      setRegisterStep('edit');
-    }, 1500);
+    }
+
+    setRegisterStep('edit');
   };
 
   const updateFormField = (field, value) => {
@@ -937,8 +948,8 @@ export function App() {
       {currentPage === 'register' && registerStep === 'loading' && (
         <section className="card reg-loading">
           <div className="spinner" />
-          <h3>온라인에서 투어 정보를 조회 중...</h3>
-          <p className="helper">"{searchName}" 관련 정보를 검색하고 있습니다.</p>
+          <h3>AI가 투어 정보를 생성하고 있습니다...</h3>
+          <p className="helper">"{searchName}" 관련 정보를 검색하고 있습니다. 잠시만 기다려주세요.</p>
         </section>
       )}
 

@@ -15,3 +15,9 @@ export const getTours = (params = {}) => {
 export const getTourDetail = (tourId) => apiRequest(`/tours/${tourId}`, { retries: 1 });
 
 export const createTour = (payload) => apiRequest('/tours', { method: 'POST', body: payload });
+
+export const searchTourOnline = (name, description) =>
+  apiRequest('/tours/search-online', {
+    method: 'POST',
+    body: { name, description: description || undefined },
+  });
