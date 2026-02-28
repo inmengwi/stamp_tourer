@@ -12,14 +12,17 @@ import {
 import { createTour, getTourDetail, getTours } from './api/toursApi';
 import { completeTourParticipation, joinTour, toggleTourWishlist } from './api/participationApi';
 import { createStampRecord } from './api/stampsApi';
+import { login, register, getMe } from './api/authApi';
+import { setAuthToken, clearAuthToken, ApiRequestError } from './api/apiClient';
+
+const TOKEN_STORAGE_KEY = 'stamp_tourer_token';
 
 const pages = [
-  { key: 'discover', label: '탐색', icon: '\uD83D\uDD0D' },
-  { key: 'register', label: '등록', icon: '\u2795' },
-  { key: 'plan', label: '내 투어', icon: '\uD83D\uDDFA\uFE0F' },
-  { key: 'wishlist', label: '위시리스트', icon: '\u2665' },
-  { key: 'collect', label: '기록', icon: '\uD83D\uDCDD' },
-  { key: 'detail', label: '상세', icon: '\uD83D\uDCCB' },
+  { key: 'discover', label: '탐색', icon: '🔍' },
+  { key: 'register', label: '등록', icon: '➕' },
+  { key: 'plan', label: '내 투어', icon: '🗺️' },
+  { key: 'wishlist', label: '위시리스트', icon: '♥' },
+  { key: 'collect', label: '기록', icon: '📝' },
 ];
 
 const emptyForm = () => ({
@@ -45,6 +48,8 @@ const emptyForm = () => ({
   thumbnailEmoji: '📍',
 });
 
+const emptyAuthForm = () => ({ email: '', password: '', nickname: '' });
+
 const makeState = () => ({ loading: false, error: '' });
 
 export function App() {
@@ -59,9 +64,9 @@ export function App() {
   const [selectedTourId, setSelectedTourId] = useState('');
   const [selectedTour, setSelectedTour] = useState(null);
 
-  const [activePlans, setActivePlans] = useState([]);
-  const [completedPlans, setCompletedPlans] = useState([]);
-  const [wishlist, setWishlist] = useState([]);
+  const [activePlans, setActivePlans] = useState([]); // tourId[]
+  const [completedPlans, setCompletedPlans] = useState([]); // tourId[]
+  const [wishlist, setWishlist] = useState([]); // tourId[]
   const [records, setRecords] = useState([]);
 
   const [recordSpotId, setRecordSpotId] = useState('');
@@ -77,6 +82,12 @@ export function App() {
   const [editMilestones, setEditMilestones] = useState([]);
   const [editNotices, setEditNotices] = useState([]);
 
+  // ---- User / Auth State ----
+  const [currentUser, setCurrentUser] = useState(null); // { id, email, nickname }
+  const [authModal, setAuthModal] = useState(null); // 'login' | 'register' | null
+  const [authTab, setAuthTab] = useState('login'); // 'login' | 'register'
+  const [authForm, setAuthForm] = useState(emptyAuthForm());
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const openMenu = () => setIsMenuOpen(true);
   const closeMenu = () => setIsMenuOpen(false);
@@ -88,10 +99,44 @@ export function App() {
     register: makeState(),
     action: makeState(),
     collect: makeState(),
+    auth: makeState(),
+    profile: makeState(),
   });
 
   const setScreen = (screen, patch) => {
     setScreens((prev) => ({ ...prev, [screen]: { ...prev[screen], ...patch } }));
+  };
+
+  // ---- Init: restore token from localStorage ----
+  useEffect(() => {
+    const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (stored) {
+      setAuthToken(stored);
+      getMe()
+        .then((data) => {
+          setCurrentUser(data.user);
+          loadUserCollection();
+        })
+        .catch(() => {
+          // token invalid or expired — clear it
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
+          clearAuthToken();
+        });
+    }
+  }, []);
+
+  const loadUserCollection = async () => {
+    try {
+      const { apiRequest } = await import('./api/apiClient');
+      const data = await apiRequest('/collections/me?includeRecords=true');
+      const col = data.collection ?? data;
+      setActivePlans((col.activeTours ?? []).map((t) => t.tourId));
+      setCompletedPlans((col.completedTours ?? []).map((t) => t.tourId));
+      setWishlist((col.wishlist ?? []).map((w) => w.tourId));
+      setRecords(col.records ?? []);
+    } catch {
+      // non-critical — ignore
+    }
   };
 
   const loadTours = async () => {
@@ -126,20 +171,36 @@ export function App() {
     }
   };
 
+  const requireLogin = (action) => {
+    if (!currentUser) {
+      setAuthTab('login');
+      setAuthModal('open');
+      return false;
+    }
+    action();
+    return true;
+  };
+
   const onToggleWishlist = async (tourId) => {
+    if (!currentUser) { setAuthTab('login'); setAuthModal('open'); return; }
     const wished = !wishlist.includes(tourId);
     setScreen('action', { loading: true, error: '' });
     try {
       await toggleTourWishlist(tourId, wished);
       setWishlist((prev) => (wished ? [...prev, tourId] : prev.filter((id) => id !== tourId)));
     } catch (error) {
-      setScreen('action', { error: error.message || '위시리스트 변경에 실패했습니다.' });
+      if (error instanceof ApiRequestError && error.code === 'DUPLICATE_WISHLIST') {
+        setWishlist((prev) => (prev.includes(tourId) ? prev : [...prev, tourId]));
+      } else {
+        setScreen('action', { error: error.message || '위시리스트 변경에 실패했습니다.' });
+      }
     } finally {
       setScreen('action', { loading: false });
     }
   };
 
   const onJoinTour = async (tourId) => {
+    if (!currentUser) { setAuthTab('login'); setAuthModal('open'); return; }
     setScreen('action', { loading: true, error: '' });
     try {
       await joinTour(tourId);
@@ -147,7 +208,12 @@ export function App() {
       setCompletedPlans((prev) => prev.filter((id) => id !== tourId));
       setCurrentPage('plan');
     } catch (error) {
-      setScreen('action', { error: error.message || '투어 참여에 실패했습니다.' });
+      if (error instanceof ApiRequestError && error.code === 'DUPLICATE_PARTICIPATION') {
+        setActivePlans((prev) => (prev.includes(tourId) ? prev : [...prev, tourId]));
+        setCurrentPage('plan');
+      } else {
+        setScreen('action', { error: error.message || '투어 참여에 실패했습니다.' });
+      }
     } finally {
       setScreen('action', { loading: false });
     }
@@ -168,6 +234,7 @@ export function App() {
 
   const onSaveRecord = async () => {
     if (!recordSpotId) return;
+    if (!currentUser) { setAuthTab('login'); setAuthModal('open'); return; }
     setScreen('collect', { loading: true, error: '' });
     try {
       const data = await createStampRecord({ spotId: recordSpotId, method: recordMethod, memo: recordMemo });
@@ -179,6 +246,44 @@ export function App() {
     } finally {
       setScreen('collect', { loading: false });
     }
+  };
+
+  // ---- Auth Actions ----
+
+  const handleAuthSubmit = async () => {
+    const { email, password, nickname } = authForm;
+    if (!email || !password) { setScreen('auth', { error: '이메일과 비밀번호를 입력해주세요.' }); return; }
+    if (authTab === 'register' && !nickname) { setScreen('auth', { error: '닉네임을 입력해주세요.' }); return; }
+
+    setScreen('auth', { loading: true, error: '' });
+    try {
+      const data = authTab === 'login'
+        ? await login({ email, password })
+        : await register({ email, password, nickname });
+
+      const { token, user } = data;
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      setAuthToken(token);
+      setCurrentUser(user);
+      setAuthModal(null);
+      setAuthForm(emptyAuthForm());
+      await loadUserCollection();
+    } catch (error) {
+      setScreen('auth', { error: error.message || '인증에 실패했습니다.' });
+    } finally {
+      setScreen('auth', { loading: false });
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    clearAuthToken();
+    setCurrentUser(null);
+    setActivePlans([]);
+    setCompletedPlans([]);
+    setWishlist([]);
+    setRecords([]);
+    closeMenu();
   };
 
   const extractSpotsFromTour = (tour) => {
@@ -306,6 +411,7 @@ export function App() {
   };
 
   const onSubmitRegistration = async () => {
+    if (!currentUser) { setAuthTab('login'); setAuthModal('open'); return; }
     if (!registerForm || !registerForm.title.trim()) {
       alert('투어 이름을 입력해주세요.');
       return;
@@ -395,8 +501,97 @@ export function App() {
     <main className="app-shell">
       <header className="top-bar">
         <h1 className="top-bar-title">Stamp Tourer</h1>
-        <button className="menu-btn" aria-label="메뉴 열기" onClick={openMenu}>☰</button>
+        <div className="top-bar-right">
+          {currentUser ? (
+            <span className="user-badge">{currentUser.nickname}</span>
+          ) : (
+            <button className="btn-login-header" onClick={() => { setAuthTab('login'); setAuthModal('open'); }}>
+              로그인
+            </button>
+          )}
+          <button className="menu-btn" aria-label="메뉴 열기" onClick={openMenu}>☰</button>
+        </div>
       </header>
+
+      {/* Auth Modal */}
+      {authModal && (
+        <div className="auth-overlay" onClick={() => setAuthModal(null)}>
+          <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="auth-modal-header">
+              <div className="auth-tabs">
+                <button
+                  className={`auth-tab ${authTab === 'login' ? 'is-active' : ''}`}
+                  onClick={() => { setAuthTab('login'); setScreen('auth', { error: '' }); }}
+                >
+                  로그인
+                </button>
+                <button
+                  className={`auth-tab ${authTab === 'register' ? 'is-active' : ''}`}
+                  onClick={() => { setAuthTab('register'); setScreen('auth', { error: '' }); }}
+                >
+                  회원가입
+                </button>
+              </div>
+              <button className="auth-modal-close" onClick={() => setAuthModal(null)}>✕</button>
+            </div>
+
+            <div className="auth-modal-body">
+              {screens.auth.error && <p className="auth-error">{screens.auth.error}</p>}
+
+              <label className="reg-label">
+                이메일
+                <input
+                  type="email"
+                  placeholder="example@email.com"
+                  value={authForm.email}
+                  onChange={(e) => setAuthForm((f) => ({ ...f, email: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAuthSubmit()}
+                />
+              </label>
+
+              {authTab === 'register' && (
+                <label className="reg-label">
+                  닉네임
+                  <input
+                    type="text"
+                    placeholder="사용할 닉네임"
+                    value={authForm.nickname}
+                    onChange={(e) => setAuthForm((f) => ({ ...f, nickname: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAuthSubmit()}
+                  />
+                </label>
+              )}
+
+              <label className="reg-label">
+                비밀번호 {authTab === 'register' && <span className="auth-hint">(8자 이상)</span>}
+                <input
+                  type="password"
+                  placeholder="비밀번호"
+                  value={authForm.password}
+                  onChange={(e) => setAuthForm((f) => ({ ...f, password: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAuthSubmit()}
+                />
+              </label>
+
+              <button
+                className="btn-primary auth-submit-btn"
+                onClick={handleAuthSubmit}
+                disabled={screens.auth.loading}
+              >
+                {screens.auth.loading ? '처리 중...' : authTab === 'login' ? '로그인' : '회원가입'}
+              </button>
+
+              <p className="auth-switch-text">
+                {authTab === 'login' ? (
+                  <>계정이 없으신가요? <button className="auth-switch-btn" onClick={() => { setAuthTab('register'); setScreen('auth', { error: '' }); }}>회원가입</button></>
+                ) : (
+                  <>이미 계정이 있으신가요? <button className="auth-switch-btn" onClick={() => { setAuthTab('login'); setScreen('auth', { error: '' }); }}>로그인</button></>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={`menu-overlay${isMenuOpen ? ' is-open' : ''}`} onClick={closeMenu} />
       <nav className={`side-menu${isMenuOpen ? ' is-open' : ''}`} aria-label="메인 메뉴">
@@ -404,6 +599,25 @@ export function App() {
           <h2 className="side-menu-title">메뉴</h2>
           <button className="side-menu-close" onClick={closeMenu}>✕</button>
         </div>
+
+        {/* User profile section in side menu */}
+        {currentUser ? (
+          <div className="side-menu-user">
+            <div className="side-menu-user-avatar">{currentUser.nickname[0]}</div>
+            <div className="side-menu-user-info">
+              <strong>{currentUser.nickname}</strong>
+              <span>{currentUser.email}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="side-menu-guest">
+            <p>로그인하면 투어 참여, 찜, 기록을 할 수 있습니다.</p>
+            <button className="btn-primary" style={{ width: '100%' }} onClick={() => { closeMenu(); setAuthTab('login'); setAuthModal('open'); }}>
+              로그인 / 회원가입
+            </button>
+          </div>
+        )}
+
         <ul className="side-menu-list">
           <li><button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('plan'))}>
             <span className="side-menu-icon">🗺️</span>진행 중 투어
@@ -414,9 +628,11 @@ export function App() {
           <li><button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('collect'))}>
             <span className="side-menu-icon">📝</span>기록
           </button></li>
-          <li><button className="side-menu-item" onClick={() => handleMenuItemClick(() => setCurrentPage('discover'))}>
-            <span className="side-menu-icon">⚙️</span>설정
-          </button></li>
+          {currentUser && (
+            <li><button className="side-menu-item side-menu-item--logout" onClick={handleLogout}>
+              <span className="side-menu-icon">🚪</span>로그아웃
+            </button></li>
+          )}
         </ul>
       </nav>
 
@@ -526,7 +742,9 @@ export function App() {
                 <button className="action-wishlist" onClick={() => onToggleWishlist(selectedTour.id)}>
                   {wishlist.includes(selectedTour.id) ? '찜 해제' : '찜'}
                 </button>
-                <button className="action-join" onClick={() => onJoinTour(selectedTour.id)}>참여</button>
+                <button className="action-join" onClick={() => onJoinTour(selectedTour.id)}>
+                  {activePlans.includes(selectedTour.id) ? '참여 중 ✓' : '참여하기'}
+                </button>
               </div>
             </>
           )}
@@ -536,6 +754,12 @@ export function App() {
       {currentPage === 'register' && registerStep === 'input' && (
         <section className="card">
           <h2>투어 등록</h2>
+          {!currentUser && (
+            <div className="auth-nudge">
+              <p>투어를 등록하려면 로그인이 필요합니다.</p>
+              <button className="btn-primary" onClick={() => { setAuthTab('login'); setAuthModal('open'); }}>로그인하기</button>
+            </div>
+          )}
           <p className="helper">스탬프 투어 이름과 설명을 입력하면 온라인에서 상세 정보를 조회합니다.</p>
 
           <div className="reg-input-group">
@@ -825,12 +1049,33 @@ export function App() {
       {currentPage === 'plan' && (
         <section className="card">
           <h2>내 투어</h2>
+          {!currentUser && (
+            <div className="auth-nudge">
+              <p>로그인하면 참여 중인 투어를 확인할 수 있습니다.</p>
+              <button className="btn-primary" onClick={() => { setAuthTab('login'); setAuthModal('open'); }}>로그인하기</button>
+            </div>
+          )}
+          {currentUser && (
+            <div className="plan-summary two-col">
+              <article>
+                <div className="summary-value">{activePlans.length}</div>
+                <div className="summary-label">참여 중</div>
+              </article>
+              <article>
+                <div className="summary-value">{completedPlans.length}</div>
+                <div className="summary-label">완료</div>
+              </article>
+            </div>
+          )}
           <h3>진행 중</h3>
           {activeTours.length === 0 && <p className="helper">참여 중인 투어가 없습니다.</p>}
           <ul className="list">{activeTours.map((tour) => (
             <li key={tour.id} className="tour-card">
-              <div><strong>{tour.title}</strong></div>
+              <div>
+                <strong>{tour.title}</strong>
+              </div>
               <div className="stack-actions">
+                <button className="btn-outline" onClick={() => openDetail(tour.id)}>상세 보기</button>
                 <button className="btn-accent" onClick={() => onCompleteTour(tour.id)}>완료</button>
               </div>
             </li>
@@ -840,6 +1085,9 @@ export function App() {
           <ul className="list">{doneTours.map((tour) => (
             <li key={tour.id} className="tour-card completed-tour">
               <div><strong>{tour.title}</strong></div>
+              <div className="stack-actions">
+                <button className="btn-outline" onClick={() => openDetail(tour.id)}>상세 보기</button>
+              </div>
             </li>
           ))}</ul>
         </section>
@@ -848,12 +1096,19 @@ export function App() {
       {currentPage === 'wishlist' && (
         <section className="card">
           <h2>위시리스트</h2>
+          {!currentUser && (
+            <div className="auth-nudge">
+              <p>로그인하면 찜한 투어를 확인할 수 있습니다.</p>
+              <button className="btn-primary" onClick={() => { setAuthTab('login'); setAuthModal('open'); }}>로그인하기</button>
+            </div>
+          )}
           {wishedTours.length === 0 && <p className="helper">찜한 투어가 없습니다.</p>}
           <ul className="list">{wishedTours.map((tour) => (
             <li key={tour.id} className="tour-card">
-              <div><strong>{tour.title}</strong></div>
+              <div><strong>{tour.title}</strong><p>{tour.description}</p></div>
               <div className="stack-actions">
                 <button className="btn-outline" onClick={() => openDetail(tour.id)}>상세 보기</button>
+                <button className="btn" onClick={() => onToggleWishlist(tour.id)}>찜 해제</button>
               </div>
             </li>
           ))}</ul>
@@ -863,6 +1118,12 @@ export function App() {
       {currentPage === 'collect' && (
         <section className="card">
           <h2>스탬프 기록</h2>
+          {!currentUser && (
+            <div className="auth-nudge">
+              <p>로그인하면 스탬프를 수집하고 기록을 확인할 수 있습니다.</p>
+              <button className="btn-primary" onClick={() => { setAuthTab('login'); setAuthModal('open'); }}>로그인하기</button>
+            </div>
+          )}
           {screens.collect.error && <p className="helper">오류: {screens.collect.error} <button className="btn" onClick={onSaveRecord}>재시도</button></p>}
           <div className="collect-form">
             <select value={recordSpotId} onChange={(e) => setRecordSpotId(e.target.value)}>
@@ -873,21 +1134,26 @@ export function App() {
             <input value={recordMemo} onChange={(e) => setRecordMemo(e.target.value)} placeholder="메모" />
             <button className="btn-accent" onClick={onSaveRecord} disabled={screens.collect.loading}>{screens.collect.loading ? '저장 중...' : '기록 저장'}</button>
           </div>
-          {records.length > 0 && <h3>기록 내역</h3>}
-          <ul className="list">{records.map((record) => (
-            <li key={record.id ?? `${record.spotId}-${record.acquiredAt}`} className="tour-card">
-              <div>
-                <strong>{record.spotName ?? record.spotId}</strong>
-                <p>{record.memo}</p>
-              </div>
-            </li>
-          ))}</ul>
+          {records.length > 0 && (
+            <>
+              <h3>기록 내역 ({records.length}개)</h3>
+              <ul className="list">{records.map((record) => (
+                <li key={record.id ?? `${record.spotId}-${record.acquiredAt}`} className="tour-card">
+                  <div>
+                    <strong>{record.spotName ?? record.spotId}</strong>
+                    {record.memo && <p>{record.memo}</p>}
+                    <p className="helper">{record.method} · {record.acquiredAt ? new Date(record.acquiredAt).toLocaleDateString('ko-KR') : ''}</p>
+                  </div>
+                </li>
+              ))}</ul>
+            </>
+          )}
         </section>
       )}
       </div>
 
       <nav className="bottom-nav">
-        {pages.slice(0, 5).map((page) => (
+        {pages.map((page) => (
           <button
             key={page.key}
             type="button"

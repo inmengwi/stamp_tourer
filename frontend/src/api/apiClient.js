@@ -1,6 +1,17 @@
 const DEFAULT_ERROR = '요청 처리 중 오류가 발생했습니다.';
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 
+// Module-level auth token
+let _authToken = null;
+
+export const setAuthToken = (token) => {
+  _authToken = token;
+};
+
+export const clearAuthToken = () => {
+  _authToken = null;
+};
+
 export class ApiRequestError extends Error {
   constructor(message, { status, code, details, traceId } = {}) {
     super(message || DEFAULT_ERROR);
@@ -46,6 +57,9 @@ export const apiRequest = async (path, { method = 'GET', query, body, headers, r
       const requestHeaders = { Accept: 'application/json', ...headers };
       if (body) {
         requestHeaders['Content-Type'] = 'application/json';
+      }
+      if (_authToken) {
+        requestHeaders['Authorization'] = `Bearer ${_authToken}`;
       }
       response = await fetch(`${API_BASE_URL}${path}${buildQuery(query)}`, {
         method,
