@@ -373,6 +373,15 @@ const createStampRecordBodySchema = z.object({
   acquiredAt: z.string().datetime().optional(),
 });
 
+const spotIdParamSchema = z.object({
+  tourId: z.string().uuid(),
+  spotId: z.string().uuid(),
+});
+
+const upsertScheduleBodySchema = z.object({
+  scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '날짜 형식은 YYYY-MM-DD여야 합니다.'),
+});
+
 const myCollectionQuerySchema = z.object({
   includeRecords: z
     .enum(['true', 'false'])
@@ -932,6 +941,66 @@ app.post('/api/v1/stamps/records', validateJson(createStampRecordBodySchema), as
     201,
   );
 });
+
+// ---- Schedule Endpoints ----
+
+app.get('/api/v1/tours/:tourId/schedules', validateParam(tourIdParamSchema), async (c) => {
+  const userId = getActingUserId(c);
+  const { tourId } = c.req.valid('param');
+
+  const result = await c.env.DB.prepare(
+    `SELECT spot_id AS spotId, scheduled_date AS scheduledDate
+     FROM spot_schedules
+     WHERE user_id = ? AND tour_id = ?`,
+  )
+    .bind(userId, tourId)
+    .all<{ spotId: string; scheduledDate: string }>();
+
+  const schedules: Record<string, string> = {};
+  for (const row of result.results ?? []) {
+    schedules[row.spotId] = row.scheduledDate;
+  }
+
+  return c.json<ApiSuccess<{ schedules: Record<string, string> }>>({
+    success: true,
+    data: { schedules },
+  });
+});
+
+app.put(
+  '/api/v1/tours/:tourId/spots/:spotId/schedule',
+  validateParam(spotIdParamSchema),
+  validateJson(upsertScheduleBodySchema),
+  async (c) => {
+    const userId = getActingUserId(c);
+    const { tourId, spotId } = c.req.valid('param');
+    const { scheduledDate } = c.req.valid('json');
+    const now = Date.now();
+    const id = crypto.randomUUID();
+
+    await c.env.DB.prepare(
+      `INSERT INTO spot_schedules (id, user_id, tour_id, spot_id, scheduled_date, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, tour_id, spot_id)
+       DO UPDATE SET scheduled_date = excluded.scheduled_date, updated_at = excluded.updated_at`,
+    )
+      .bind(id, userId, tourId, spotId, scheduledDate, now, now)
+      .run();
+
+    return c.json<ApiSuccess<{ schedule: unknown }>>({
+      success: true,
+      data: {
+        schedule: {
+          tourId,
+          spotId,
+          userId,
+          scheduledDate,
+          updatedAt: new Date(now).toISOString(),
+        },
+      },
+    });
+  },
+);
 
 // ---- Collection Endpoint ----
 
