@@ -12,6 +12,7 @@ import {
 import { createTour, getTourDetail, getTours } from './api/toursApi';
 import { completeTourParticipation, joinTour, toggleTourWishlist } from './api/participationApi';
 import { createStampRecord } from './api/stampsApi';
+import { getSchedules, upsertSchedule } from './api/schedulesApi';
 import { login, register, getMe } from './api/authApi';
 import { setAuthToken, clearAuthToken, ApiRequestError } from './api/apiClient';
 
@@ -68,6 +69,7 @@ export function App() {
   const [completedPlans, setCompletedPlans] = useState([]); // tourId[]
   const [wishlist, setWishlist] = useState([]); // tourId[]
   const [records, setRecords] = useState([]);
+  const [schedules, setSchedules] = useState({}); // { spotId: 'YYYY-MM-DD' }
 
   const [recordSpotId, setRecordSpotId] = useState('');
   const [recordMethod, setRecordMethod] = useState('manual');
@@ -96,6 +98,7 @@ export function App() {
   const [screens, setScreens] = useState({
     discover: makeState(),
     detail: makeState(),
+    progress: makeState(),
     register: makeState(),
     action: makeState(),
     collect: makeState(),
@@ -168,6 +171,38 @@ export function App() {
       setScreen('detail', { error: error.message || '상세 정보를 불러오지 못했습니다.' });
     } finally {
       setScreen('detail', { loading: false });
+    }
+  };
+
+  const openProgress = async (tourId) => {
+    setCurrentPage('progress');
+    setSelectedTourId(tourId);
+    setScreen('progress', { loading: true, error: '' });
+    try {
+      const [tourData, schedulesData] = await Promise.all([
+        getTourDetail(tourId),
+        getSchedules(tourId),
+      ]);
+      setSelectedTour(tourData.tour ?? tourData);
+      setSchedules(schedulesData.schedules ?? {});
+    } catch (error) {
+      setScreen('progress', { error: error.message || '진행 상세를 불러오지 못했습니다.' });
+    } finally {
+      setScreen('progress', { loading: false });
+    }
+  };
+
+  const handleScheduleChange = async (tourId, spotId, dateValue) => {
+    setSchedules((prev) => ({ ...prev, [spotId]: dateValue }));
+    try {
+      await upsertSchedule(tourId, spotId, dateValue);
+    } catch {
+      // revert on failure
+      setSchedules((prev) => {
+        const next = { ...prev };
+        delete next[spotId];
+        return next;
+      });
     }
   };
 
@@ -751,6 +786,85 @@ export function App() {
         </section>
       )}
 
+      {currentPage === 'progress' && (
+        <section className="detail-page">
+          {screens.progress.loading && <p>진행 상세 로딩 중...</p>}
+          {screens.progress.error && (
+            <p className="helper">
+              오류: {screens.progress.error}{' '}
+              <button className="btn" onClick={() => openProgress(selectedTourId)}>재시도</button>
+            </p>
+          )}
+          {selectedTour && (
+            <>
+              <div className="detail-header">
+                <button className="back-btn" onClick={() => setCurrentPage('plan')}>← 내 투어</button>
+                <div className="detail-thumbnail">{selectedTour.thumbnailEmoji ?? '📍'}</div>
+                <h2 className="detail-title">{selectedTour.title}</h2>
+              </div>
+
+              <div className="detail-section">
+                <h3>방문 진행률</h3>
+                <div className="detail-progress">
+                  <progress
+                    value={(selectedTour.spots ?? []).filter((spot) =>
+                      records.some((r) => String(r.spotId) === String(spot.id))
+                    ).length}
+                    max={(selectedTour.spots ?? []).length || 1}
+                  />
+                  <span>
+                    {(selectedTour.spots ?? []).filter((spot) =>
+                      records.some((r) => String(r.spotId) === String(spot.id))
+                    ).length}
+                    {' / '}
+                    {(selectedTour.spots ?? []).length}곳 완료
+                  </span>
+                </div>
+
+                <ul className="spot-list">
+                  {(selectedTour.spots ?? []).map((spot, idx) => {
+                    const isVisited = records.some(
+                      (r) => String(r.spotId) === String(spot.id)
+                    );
+                    return (
+                      <li key={spot.id} className={`spot-card${isVisited ? ' is-visited' : ''}`}>
+                        <div className="spot-number">{idx + 1}</div>
+                        <div className="spot-info">
+                          <strong>{spot.name}</strong>
+                          {spot.address && (
+                            <div className="spot-meta"><span>{spot.address}</span></div>
+                          )}
+                          <div className="progress-spot-check">
+                            <label className="progress-check-label">
+                              <input type="checkbox" checked={isVisited} disabled />
+                              {isVisited ? '방문 완료' : '미방문'}
+                            </label>
+                          </div>
+                          {!isVisited && (
+                            <div className="progress-spot-schedule">
+                              <label className="progress-date-label">
+                                예정 일정
+                                <input
+                                  type="date"
+                                  value={schedules[spot.id] ?? ''}
+                                  onChange={(e) =>
+                                    handleScheduleChange(selectedTour.id, spot.id, e.target.value)
+                                  }
+                                />
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
       {currentPage === 'register' && registerStep === 'input' && (
         <section className="card">
           <h2>투어 등록</h2>
@@ -1075,7 +1189,7 @@ export function App() {
                 <strong>{tour.title}</strong>
               </div>
               <div className="stack-actions">
-                <button className="btn-outline" onClick={() => openDetail(tour.id)}>상세 보기</button>
+                <button className="btn-outline" onClick={() => openProgress(tour.id)}>진행 상세</button>
                 <button className="btn-accent" onClick={() => onCompleteTour(tour.id)}>완료</button>
               </div>
             </li>
