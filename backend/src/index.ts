@@ -8,6 +8,7 @@ type Bindings = {
   DB: D1Database;
   JWT_ISSUER: string;
   ACCESS_TOKEN_TTL_SECONDS: string;
+  JWT_SECRET: string;
   CORS_ORIGINS?: string;
 };
 
@@ -39,6 +40,8 @@ class AppHttpError extends HTTPException {
 
 type Variables = {
   traceId: string;
+  userId?: string;
+  userNickname?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -81,7 +84,7 @@ app.use(
 
       return '';
     },
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
     maxAge: 600,
   }),
@@ -91,6 +94,114 @@ app.use('/api/*', async (c, next) => {
   c.set('traceId', crypto.randomUUID());
   await next();
 });
+
+// ---- JWT Utilities (Web Crypto API) ----
+
+const base64urlEncode = (data: Uint8Array): string =>
+  btoa(String.fromCharCode(...data))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+
+const base64urlDecode = (str: string): Uint8Array => {
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '=='.slice((2 - (base64.length & 3)) & 3);
+  return new Uint8Array([...atob(padded)].map((c) => c.charCodeAt(0)));
+};
+
+const getHmacKey = (secret: string): Promise<CryptoKey> =>
+  crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+    'verify',
+  ]);
+
+const signJwt = async (payload: Record<string, unknown>, secret: string): Promise<string> => {
+  const enc = new TextEncoder();
+  const header = base64urlEncode(enc.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
+  const body = base64urlEncode(enc.encode(JSON.stringify(payload)));
+  const signingInput = `${header}.${body}`;
+  const key = await getHmacKey(secret);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(signingInput)));
+  return `${signingInput}.${base64urlEncode(sig)}`;
+};
+
+const verifyJwt = async (token: string, secret: string): Promise<Record<string, unknown>> => {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('invalid jwt format');
+  const [header, body, sig] = parts;
+  const key = await getHmacKey(secret);
+  const enc = new TextEncoder();
+  const valid = await crypto.subtle.verify('HMAC', key, base64urlDecode(sig), enc.encode(`${header}.${body}`));
+  if (!valid) throw new Error('invalid jwt signature');
+  const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(body))) as Record<string, unknown>;
+  if (typeof decoded.exp === 'number' && Date.now() / 1000 > decoded.exp) throw new Error('jwt expired');
+  return decoded;
+};
+
+// ---- Password Utilities ----
+
+const hashPassword = async (password: string): Promise<string> => {
+  const salt = crypto.randomUUID().replace(/-/g, '');
+  const enc = new TextEncoder();
+  const hash = await crypto.subtle.digest('SHA-256', enc.encode(salt + password));
+  return `${salt}:${btoa(String.fromCharCode(...new Uint8Array(hash)))}`;
+};
+
+const verifyPassword = async (password: string, stored: string): Promise<boolean> => {
+  const idx = stored.indexOf(':');
+  if (idx === -1) return false;
+  const salt = stored.slice(0, idx);
+  const hash = stored.slice(idx + 1);
+  const enc = new TextEncoder();
+  const computed = await crypto.subtle.digest('SHA-256', enc.encode(salt + password));
+  return btoa(String.fromCharCode(...new Uint8Array(computed))) === hash;
+};
+
+// ---- Auth Middleware ----
+
+// Optional auth: sets userId from JWT if valid, otherwise continues without
+const optionalAuth = async (c: any, next: any) => {
+  const authHeader = c.req.header('Authorization') as string | undefined;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const secret = c.env.JWT_SECRET as string | undefined;
+    if (secret) {
+      try {
+        const payload = await verifyJwt(token, secret);
+        if (typeof payload.sub === 'string') c.set('userId', payload.sub);
+        if (typeof payload.nickname === 'string') c.set('userNickname', payload.nickname);
+      } catch {
+        // ignore — proceed as unauthenticated
+      }
+    }
+  }
+  await next();
+};
+
+// Required auth: throws 401 if no valid JWT
+const requireAuth = async (c: any, next: any) => {
+  const authHeader = c.req.header('Authorization') as string | undefined;
+  if (!authHeader?.startsWith('Bearer ')) {
+    throw new AppHttpError(401, { code: 'UNAUTHORIZED', message: '로그인이 필요합니다.' });
+  }
+  const token = authHeader.slice(7);
+  const secret = c.env.JWT_SECRET as string | undefined;
+  if (!secret) {
+    throw new AppHttpError(500, { code: 'SERVER_CONFIG_ERROR', message: '서버 설정 오류입니다.' });
+  }
+  try {
+    const payload = await verifyJwt(token, secret);
+    if (typeof payload.sub !== 'string') throw new Error('missing sub');
+    c.set('userId', payload.sub);
+    if (typeof payload.nickname === 'string') c.set('userNickname', payload.nickname);
+  } catch {
+    throw new AppHttpError(401, { code: 'INVALID_TOKEN', message: '유효하지 않은 인증 정보입니다.' });
+  }
+  await next();
+};
+
+// Apply optional auth to all API routes
+app.use('/api/*', optionalAuth);
 
 const requiredTables = ['users', 'tours', 'stamp_spots', 'tour_participations', 'tour_wishlist', 'stamp_records'] as const;
 
@@ -132,7 +243,11 @@ const validateParam = <T extends z.ZodTypeAny>(schema: T) =>
     }
   });
 
-const getActingUserId = (c: any): string => c.req.header('x-user-id') ?? '00000000-0000-0000-0000-000000000001';
+// Prefers JWT-derived userId, falls back to x-user-id header, then default test user
+const getActingUserId = (c: any): string =>
+  (c.get('userId') as string | undefined) ??
+  (c.req.header('x-user-id') as string | undefined) ??
+  '00000000-0000-0000-0000-000000000001';
 
 const assertTourExists = async (db: D1Database, tourId: string) => {
   const tour = await db.prepare('SELECT id FROM tours WHERE id = ?').bind(tourId).first<{ id: string }>();
@@ -221,41 +336,7 @@ app.onError((err, c) => {
   );
 });
 
-app.get('/api/v1/health', async (c) => {
-  const existingTablesResult = await c.env.DB.prepare(
-    `SELECT name
-     FROM sqlite_master
-     WHERE type = 'table'
-       AND name IN (${requiredTables.map(() => '?').join(', ')})`,
-  )
-    .bind(...requiredTables)
-    .all<{ name: string }>();
-
-  const existingTableNames = new Set(existingTablesResult.results?.map((row) => row.name) ?? []);
-  const missingTables = requiredTables.filter((table) => !existingTableNames.has(table));
-
-  if (missingTables.length > 0) {
-    return c.json<ApiError>(
-      {
-        success: false,
-        error: {
-          code: 'DB_SCHEMA_MISSING',
-          message: 'D1 스키마가 적용되지 않았습니다. 마이그레이션을 실행하세요.',
-          details: { missingTables },
-        },
-      },
-      500,
-    );
-  }
-
-  return c.json<ApiSuccess<{ status: 'ok'; tables: readonly string[] }>>({
-    success: true,
-    data: {
-      status: 'ok',
-      tables: requiredTables,
-    },
-  });
-});
+// ---- Validation Schemas ----
 
 const listToursQuerySchema = z.object({
   keyword: z.string().max(100).optional(),
@@ -298,6 +379,134 @@ const myCollectionQuerySchema = z.object({
     .optional()
     .transform((value) => value !== 'false'),
 });
+
+const registerBodySchema = z.object({
+  email: z.string().email().max(255),
+  password: z.string().min(8).max(100),
+  nickname: z.string().min(1).max(50),
+});
+
+const loginBodySchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+// ---- Health ----
+
+app.get('/api/v1/health', async (c) => {
+  const existingTablesResult = await c.env.DB.prepare(
+    `SELECT name
+     FROM sqlite_master
+     WHERE type = 'table'
+       AND name IN (${requiredTables.map(() => '?').join(', ')})`,
+  )
+    .bind(...requiredTables)
+    .all<{ name: string }>();
+
+  const existingTableNames = new Set(existingTablesResult.results?.map((row) => row.name) ?? []);
+  const missingTables = requiredTables.filter((table) => !existingTableNames.has(table));
+
+  if (missingTables.length > 0) {
+    return c.json<ApiError>(
+      {
+        success: false,
+        error: {
+          code: 'DB_SCHEMA_MISSING',
+          message: 'D1 스키마가 적용되지 않았습니다. 마이그레이션을 실행하세요.',
+          details: { missingTables },
+        },
+      },
+      500,
+    );
+  }
+
+  return c.json<ApiSuccess<{ status: 'ok'; tables: readonly string[] }>>({
+    success: true,
+    data: {
+      status: 'ok',
+      tables: requiredTables,
+    },
+  });
+});
+
+// ---- Auth Endpoints ----
+
+app.post('/api/v1/auth/register', validateJson(registerBodySchema), async (c) => {
+  const { email, password, nickname } = c.req.valid('json');
+
+  const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+  if (existing) {
+    throw new AppHttpError(409, { code: 'DUPLICATE_EMAIL', message: '이미 사용 중인 이메일입니다.' });
+  }
+
+  const id = crypto.randomUUID();
+  const passwordHash = await hashPassword(password);
+  const now = Date.now();
+
+  await c.env.DB.prepare(
+    'INSERT INTO users (id, email, password_hash, nickname, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  )
+    .bind(id, email, passwordHash, nickname, 'user', now, now)
+    .run();
+
+  const secret = c.env.JWT_SECRET;
+  const ttl = parseInt(c.env.ACCESS_TOKEN_TTL_SECONDS || '86400');
+  const iat = Math.floor(Date.now() / 1000);
+
+  const token = await signJwt(
+    { sub: id, nickname, email, iat, exp: iat + ttl, iss: c.env.JWT_ISSUER },
+    secret,
+  );
+
+  return c.json<ApiSuccess<{ token: string; user: unknown }>>(
+    { success: true, data: { token, user: { id, email, nickname } } },
+    201,
+  );
+});
+
+app.post('/api/v1/auth/login', validateJson(loginBodySchema), async (c) => {
+  const { email, password } = c.req.valid('json');
+
+  const user = await c.env.DB.prepare('SELECT id, email, password_hash, nickname FROM users WHERE email = ?')
+    .bind(email)
+    .first<{ id: string; email: string; password_hash: string; nickname: string }>();
+
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
+    throw new AppHttpError(401, { code: 'INVALID_CREDENTIALS', message: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+  }
+
+  const secret = c.env.JWT_SECRET;
+  const ttl = parseInt(c.env.ACCESS_TOKEN_TTL_SECONDS || '86400');
+  const iat = Math.floor(Date.now() / 1000);
+
+  const token = await signJwt(
+    { sub: user.id, nickname: user.nickname, email: user.email, iat, exp: iat + ttl, iss: c.env.JWT_ISSUER },
+    secret,
+  );
+
+  return c.json<ApiSuccess<{ token: string; user: unknown }>>({
+    success: true,
+    data: { token, user: { id: user.id, email: user.email, nickname: user.nickname } },
+  });
+});
+
+// ---- User Endpoints ----
+
+app.get('/api/v1/users/me', requireAuth, async (c) => {
+  const userId = c.get('userId') as string;
+
+  const user = await c.env.DB.prepare('SELECT id, email, nickname, role FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string; email: string; nickname: string; role: string }>();
+
+  if (!user) {
+    throw new AppHttpError(404, { code: 'NOT_FOUND_USER', message: '사용자를 찾을 수 없습니다.' });
+  }
+
+  return c.json<ApiSuccess<{ user: unknown }>>({ success: true, data: { user } });
+});
+
+// ---- Tour Endpoints ----
 
 app.get('/api/v1/tours', validateQuery(listToursQuerySchema), async (c) => {
   const query = c.req.valid('query');
@@ -522,6 +731,8 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
   });
 });
 
+// ---- Participation Endpoints ----
+
 app.post(
   '/api/v1/tours/:tourId/participation',
   validateParam(tourIdParamSchema),
@@ -568,6 +779,50 @@ app.post(
   },
 );
 
+app.post(
+  '/api/v1/tours/:tourId/participation/complete',
+  validateParam(tourIdParamSchema),
+  async (c) => {
+    const userId = getActingUserId(c);
+    const { tourId } = c.req.valid('param');
+
+    const participation = await c.env.DB.prepare(
+      `SELECT id FROM tour_participations WHERE tour_id = ? AND user_id = ? AND status = 'active'`,
+    )
+      .bind(tourId, userId)
+      .first<{ id: string }>();
+
+    if (!participation) {
+      throw new AppHttpError(404, {
+        code: 'NOT_FOUND_PARTICIPATION',
+        message: '참여 중인 투어를 찾을 수 없습니다.',
+        details: { tourId, userId },
+      });
+    }
+
+    const now = Date.now();
+    await c.env.DB.prepare(
+      `UPDATE tour_participations SET status = 'completed', updated_at = ? WHERE tour_id = ? AND user_id = ?`,
+    )
+      .bind(now, tourId, userId)
+      .run();
+
+    return c.json<ApiSuccess<{ participation: unknown }>>({
+      success: true,
+      data: {
+        participation: {
+          tourId,
+          userId,
+          status: 'completed',
+          completedAt: new Date(now).toISOString(),
+        },
+      },
+    });
+  },
+);
+
+// ---- Wishlist Endpoint ----
+
 app.post('/api/v1/tours/:tourId/wishlist', validateParam(tourIdParamSchema), validateJson(wishlistBodySchema), async (c) => {
   const userId = getActingUserId(c);
   const { tourId } = c.req.valid('param');
@@ -611,6 +866,8 @@ app.post('/api/v1/tours/:tourId/wishlist', validateParam(tourIdParamSchema), val
     },
   });
 });
+
+// ---- Stamp Endpoints ----
 
 app.post('/api/v1/stamps/records', validateJson(createStampRecordBodySchema), async (c) => {
   const body = c.req.valid('json');
@@ -676,11 +933,16 @@ app.post('/api/v1/stamps/records', validateJson(createStampRecordBodySchema), as
   );
 });
 
+// ---- Collection Endpoint ----
+
 app.get('/api/v1/collections/me', validateQuery(myCollectionQuerySchema), async (c) => {
   const { includeRecords } = c.req.valid('query');
   const userId = getActingUserId(c);
 
-  const [activeToursResult, completedToursResult, wishlistResult, recordsResult] = await Promise.all([
+  const [userResult, activeToursResult, completedToursResult, wishlistResult, recordsResult] = await Promise.all([
+    c.env.DB.prepare('SELECT id, nickname FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ id: string; nickname: string }>(),
     c.env.DB.prepare(
       `SELECT tp.tour_id AS tourId, t.title, tp.joined_at AS joinedAt
        FROM tour_participations tp
@@ -733,7 +995,7 @@ app.get('/api/v1/collections/me', validateQuery(myCollectionQuerySchema), async 
     success: true,
     data: {
       collection: {
-        user: { id: userId },
+        user: { id: userId, nickname: userResult?.nickname ?? null },
         summary: {
           activeTourCount: activeToursResult.results?.length ?? 0,
           completedTourCount: completedToursResult.results?.length ?? 0,
