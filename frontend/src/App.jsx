@@ -55,6 +55,7 @@ const makeState = () => ({ loading: false, error: '' });
 
 export function App() {
   const [currentPage, setCurrentPage] = useState('discover');
+  const [planFilter, setPlanFilter] = useState('active');
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState('');
   const [region, setRegion] = useState('');
@@ -1170,40 +1171,65 @@ export function App() {
             </div>
           )}
           {currentUser && (
-            <div className="plan-summary two-col">
-              <article>
-                <div className="summary-value">{activePlans.length}</div>
-                <div className="summary-label">참여 중</div>
-              </article>
-              <article>
-                <div className="summary-value">{completedPlans.length}</div>
-                <div className="summary-label">완료</div>
-              </article>
-            </div>
+            <>
+              <div className="plan-summary two-col">
+                <article>
+                  <div className="summary-value">{activePlans.length}</div>
+                  <div className="summary-label">참여 중</div>
+                </article>
+                <article>
+                  <div className="summary-value">{completedPlans.length}</div>
+                  <div className="summary-label">완료</div>
+                </article>
+              </div>
+
+              <div className="plan-filter-tabs" role="tablist" aria-label="내 투어 상태 필터">
+                <button
+                  className={`plan-filter-tab ${planFilter === 'active' ? 'is-active' : ''}`}
+                  onClick={() => setPlanFilter('active')}
+                >
+                  참여 중
+                </button>
+                <button
+                  className={`plan-filter-tab ${planFilter === 'completed' ? 'is-active' : ''}`}
+                  onClick={() => setPlanFilter('completed')}
+                >
+                  완료
+                </button>
+              </div>
+            </>
           )}
-          <h3>진행 중</h3>
-          {activeTours.length === 0 && <p className="helper">참여 중인 투어가 없습니다.</p>}
-          <ul className="list">{activeTours.map((tour) => (
-            <li key={tour.id} className="tour-card">
-              <div>
-                <strong>{tour.title}</strong>
-              </div>
-              <div className="stack-actions">
-                <button className="btn-outline" onClick={() => openProgress(tour.id)}>진행 상세</button>
-                <button className="btn-accent" onClick={() => onCompleteTour(tour.id)}>완료</button>
-              </div>
-            </li>
-          ))}</ul>
-          <h3>완료</h3>
-          {doneTours.length === 0 && <p className="helper">완료한 투어가 없습니다.</p>}
-          <ul className="list">{doneTours.map((tour) => (
-            <li key={tour.id} className="tour-card completed-tour">
-              <div><strong>{tour.title}</strong></div>
-              <div className="stack-actions">
-                <button className="btn-outline" onClick={() => openProgress(tour.id)}>진행 상세</button>
-              </div>
-            </li>
-          ))}</ul>
+
+          {planFilter === 'active' ? (
+            <>
+              <h3>참여 중</h3>
+              {activeTours.length === 0 && <p className="helper">참여 중인 투어가 없습니다.</p>}
+              <ul className="list">{activeTours.map((tour) => (
+                <li key={tour.id} className="tour-card">
+                  <div>
+                    <strong>{tour.title}</strong>
+                  </div>
+                  <div className="stack-actions">
+                    <button className="btn-outline" onClick={() => openProgress(tour.id)}>진행 상세</button>
+                    <button className="btn-accent" onClick={() => onCompleteTour(tour.id)}>완료</button>
+                  </div>
+                </li>
+              ))}</ul>
+            </>
+          ) : (
+            <>
+              <h3>완료</h3>
+              {doneTours.length === 0 && <p className="helper">완료한 투어가 없습니다.</p>}
+              <ul className="list">{doneTours.map((tour) => (
+                <li key={tour.id} className="tour-card completed-tour">
+                  <div><strong>{tour.title}</strong></div>
+                  <div className="stack-actions">
+                    <button className="btn-outline" onClick={() => openProgress(tour.id)}>진행 상세</button>
+                  </div>
+                </li>
+              ))}</ul>
+            </>
+          )}
         </section>
       )}
 
