@@ -405,9 +405,9 @@ export function App() {
             <select value={period} onChange={(e) => setPeriod(e.target.value)}>{PERIOD_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>{SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
           </div>
-          <div className="stack-actions"><button className="btn" onClick={loadTours}>필터 적용</button></div>
-          {screens.discover.loading && <p>로딩 중...</p>}
-          {screens.discover.error && <p>오류: {screens.discover.error} <button className="btn" onClick={loadTours}>재시도</button></p>}
+          <button className="btn-primary" style={{ width: '100%', marginBottom: 16 }} onClick={loadTours}>필터 적용</button>
+          {screens.discover.loading && <p className="helper">로딩 중...</p>}
+          {screens.discover.error && <p className="helper">오류: {screens.discover.error} <button className="btn" onClick={loadTours}>재시도</button></p>}
           <ul className="list">
             {filteredTours.map((tour) => (
               <li key={tour.id} className="tour-card">
@@ -416,9 +416,11 @@ export function App() {
                   <p>{tour.description}</p>
                 </div>
                 <div className="stack-actions">
-                  <button className="btn" onClick={() => openDetail(tour.id)}>상세 보기</button>
-                  <button className="btn" onClick={() => onToggleWishlist(tour.id)}>{wishlist.includes(tour.id) ? '찜 해제' : '찜'}</button>
-                  <button className="btn" onClick={() => onJoinTour(tour.id)}>참여</button>
+                  <button className="btn-outline" onClick={() => openDetail(tour.id)}>상세 보기</button>
+                  <div className="stack-actions-row">
+                    <button className="btn" onClick={() => onToggleWishlist(tour.id)}>{wishlist.includes(tour.id) ? '찜 해제' : '♥ 찜'}</button>
+                    <button className="btn-accent" onClick={() => onJoinTour(tour.id)}>참여</button>
+                  </div>
                 </div>
               </li>
             ))}
@@ -796,31 +798,62 @@ export function App() {
         <section className="card">
           <h2>내 투어</h2>
           <h3>진행 중</h3>
-          <ul className="list">{activeTours.map((tour) => <li key={tour.id} className="tour-card"><strong>{tour.title}</strong><button className="btn" onClick={() => onCompleteTour(tour.id)}>완료</button></li>)}</ul>
+          {activeTours.length === 0 && <p className="helper">참여 중인 투어가 없습니다.</p>}
+          <ul className="list">{activeTours.map((tour) => (
+            <li key={tour.id} className="tour-card">
+              <div><strong>{tour.title}</strong></div>
+              <div className="stack-actions">
+                <button className="btn-accent" onClick={() => onCompleteTour(tour.id)}>완료</button>
+              </div>
+            </li>
+          ))}</ul>
           <h3>완료</h3>
-          <ul className="list">{doneTours.map((tour) => <li key={tour.id} className="tour-card"><strong>{tour.title}</strong></li>)}</ul>
+          {doneTours.length === 0 && <p className="helper">완료한 투어가 없습니다.</p>}
+          <ul className="list">{doneTours.map((tour) => (
+            <li key={tour.id} className="tour-card completed-tour">
+              <div><strong>{tour.title}</strong></div>
+            </li>
+          ))}</ul>
         </section>
       )}
 
       {currentPage === 'wishlist' && (
         <section className="card">
           <h2>위시리스트</h2>
-          <ul className="list">{wishedTours.map((tour) => <li key={tour.id} className="tour-card"><strong>{tour.title}</strong></li>)}</ul>
+          {wishedTours.length === 0 && <p className="helper">찜한 투어가 없습니다.</p>}
+          <ul className="list">{wishedTours.map((tour) => (
+            <li key={tour.id} className="tour-card">
+              <div><strong>{tour.title}</strong></div>
+              <div className="stack-actions">
+                <button className="btn-outline" onClick={() => openDetail(tour.id)}>상세 보기</button>
+              </div>
+            </li>
+          ))}</ul>
         </section>
       )}
 
       {currentPage === 'collect' && (
         <section className="card">
           <h2>스탬프 기록</h2>
-          {screens.collect.error && <p>오류: {screens.collect.error} <button className="btn" onClick={onSaveRecord}>재시도</button></p>}
-          <select value={recordSpotId} onChange={(e) => setRecordSpotId(e.target.value)}>
-            <option value="">스팟 선택</option>
-            {allSpots.map((spot) => <option key={spot.id} value={spot.id}>{spot.tourTitle} - {spot.name}</option>)}
-          </select>
-          <select value={recordMethod} onChange={(e) => setRecordMethod(e.target.value)}>{VERIFICATION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-          <input value={recordMemo} onChange={(e) => setRecordMemo(e.target.value)} placeholder="메모" />
-          <button className="btn" onClick={onSaveRecord} disabled={screens.collect.loading}>{screens.collect.loading ? '저장 중...' : '기록 저장'}</button>
-          <ul className="list">{records.map((record) => <li key={record.id ?? `${record.spotId}-${record.acquiredAt}`}><strong>{record.spotName ?? record.spotId}</strong> - {record.memo}</li>)}</ul>
+          {screens.collect.error && <p className="helper">오류: {screens.collect.error} <button className="btn" onClick={onSaveRecord}>재시도</button></p>}
+          <div className="collect-form">
+            <select value={recordSpotId} onChange={(e) => setRecordSpotId(e.target.value)}>
+              <option value="">스팟 선택</option>
+              {allSpots.map((spot) => <option key={spot.id} value={spot.id}>{spot.tourTitle} - {spot.name}</option>)}
+            </select>
+            <select value={recordMethod} onChange={(e) => setRecordMethod(e.target.value)}>{VERIFICATION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+            <input value={recordMemo} onChange={(e) => setRecordMemo(e.target.value)} placeholder="메모" />
+            <button className="btn-accent" onClick={onSaveRecord} disabled={screens.collect.loading}>{screens.collect.loading ? '저장 중...' : '기록 저장'}</button>
+          </div>
+          {records.length > 0 && <h3>기록 내역</h3>}
+          <ul className="list">{records.map((record) => (
+            <li key={record.id ?? `${record.spotId}-${record.acquiredAt}`} className="tour-card">
+              <div>
+                <strong>{record.spotName ?? record.spotId}</strong>
+                <p>{record.memo}</p>
+              </div>
+            </li>
+          ))}</ul>
         </section>
       )}
       </div>
