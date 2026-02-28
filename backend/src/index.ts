@@ -10,6 +10,11 @@ type Bindings = {
   ACCESS_TOKEN_TTL_SECONDS: string;
   JWT_SECRET: string;
   CORS_ORIGINS?: string;
+  AI_PROVIDER?: string;
+  AI_MODEL?: string;
+  GEMINI_API_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
+  OPENAI_API_KEY?: string;
 };
 
 type ApiSuccess<T> = {
@@ -430,6 +435,207 @@ const loginBodySchema = z.object({
   password: z.string().min(1),
 });
 
+const searchOnlineBodySchema = z.object({
+  name: z.string().min(1, '투어 이름은 필수입니다.').max(200),
+  description: z.string().max(1000).optional(),
+});
+
+const aiTourResponseSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).default(''),
+  category: z.enum(['railway', 'sightseeing', 'festival', 'local', 'theme']).default('sightseeing'),
+  regionCode: z.string().max(30).default('서울'),
+  difficulty: z.enum(['beginner', 'mid', 'expert']).default('beginner'),
+  duration: z.enum(['day', 'weekend', 'long']).default('day'),
+  budget: z.enum(['low', 'mid', 'high']).default('low'),
+  period: z.enum(['active', 'always', 'upcoming']).default('always'),
+  status: z.enum(['planned', 'active', 'ended']).default('active'),
+  reward: z.string().max(200).default(''),
+  estimatedHours: z.number().min(0).default(4),
+  estimatedCost: z.string().max(50).default('₩0'),
+  organizer: z.string().max(200).default(''),
+  targetAudience: z.string().max(200).default('누구나'),
+  verificationMethods: z.array(z.enum(['manual', 'gps', 'qr', 'photo'])).default(['manual']),
+  milestones: z.array(z.object({
+    stampCount: z.number().min(1),
+    reward: z.string().max(200),
+  })).default([]),
+  notices: z.array(z.string().max(500)).default([]),
+  contactInfo: z.object({
+    phone: z.string().default(''),
+    email: z.string().default(''),
+    website: z.string().default(''),
+  }).default({ phone: '', email: '', website: '' }),
+  tags: z.array(z.string().max(50)).default([]),
+  thumbnailEmoji: z.string().max(10).default('📍'),
+  spots: z.array(z.object({
+    name: z.string().min(1).max(200),
+    address: z.string().max(300).default(''),
+    openHours: z.string().max(100).default(''),
+    description: z.string().max(500).default(''),
+    verificationTypes: z.array(z.string()).default(['manual']),
+  })).default([]),
+});
+
+// ---- AI Tour Search ----
+
+const TOUR_SEARCH_SYSTEM_PROMPT = `당신은 한국의 스탬프 투어 전문가입니다. 사용자가 투어 이름과 설명을 제공하면, 해당 투어에 대한 상세 정보를 JSON 형식으로 생성합니다.
+
+## 규칙
+1. 반드시 유효한 JSON만 출력하세요. 설명이나 마크다운 없이 순수 JSON만 반환합니다.
+2. 한국의 실제 장소, 관광지, 문화유산, 축제, 철도 등에 대한 지식을 활용하세요.
+3. 알 수 없는 투어라면, 사용자가 제공한 이름과 설명을 바탕으로 합리적인 투어 정보를 생성하세요.
+4. 모든 텍스트는 한국어로 작성하세요.
+5. 장소(spots)는 최소 3개, 최대 10개를 포함하세요.
+6. 각 장소의 주소는 가능하면 실제 주소를 사용하세요.
+
+## 출력 JSON 스키마
+{
+  "title": "투어 제목 (string)",
+  "description": "투어 상세 설명 (string, 2~3문장)",
+  "category": "railway | sightseeing | festival | local | theme 중 하나",
+  "regionCode": "서울 | 부산 | 제주 | 경기 | 강원 | 충북 | 충남 | 전북 | 전남 | 경북 | 경남 | 인천 | 대전 | 대구 | 광주 | 울산 | 세종 중 하나",
+  "difficulty": "beginner | mid | expert 중 하나",
+  "duration": "day | weekend | long 중 하나",
+  "budget": "low | mid | high 중 하나",
+  "period": "active | always | upcoming 중 하나",
+  "status": "planned | active | ended 중 하나",
+  "reward": "최종 보상 설명 (string)",
+  "estimatedHours": 예상 소요 시간 (number),
+  "estimatedCost": "예상 비용 (string, 예: ₩15,000)",
+  "organizer": "주최 기관 (string)",
+  "targetAudience": "대상 (string, 예: 누구나)",
+  "verificationMethods": ["manual", "gps", "qr", "photo" 중 해당하는 것들],
+  "milestones": [
+    { "stampCount": number, "reward": "보상 설명" }
+  ],
+  "notices": ["주의사항1", "주의사항2"],
+  "contactInfo": {
+    "phone": "전화번호",
+    "email": "이메일",
+    "website": "웹사이트 URL"
+  },
+  "tags": ["태그1", "태그2"],
+  "thumbnailEmoji": "대표 이모지 1개",
+  "spots": [
+    {
+      "name": "장소명",
+      "address": "주소",
+      "openHours": "운영시간 (예: 09:00-18:00)",
+      "description": "장소 설명",
+      "verificationTypes": ["manual", "gps", "qr", "photo" 중 해당하는 것들]
+    }
+  ]
+}`;
+
+const DEFAULT_AI_MODELS: Record<string, string> = {
+  gemini: 'gemini-2.5-flash',
+  anthropic: 'claude-sonnet-4-20250514',
+  openai: 'gpt-4o-mini',
+};
+
+function extractJSON(text: string): unknown {
+  let jsonStr = text.trim();
+  const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    jsonStr = fenceMatch[1].trim();
+  }
+  return JSON.parse(jsonStr);
+}
+
+async function callGemini(model: string, apiKey: string, systemPrompt: string, userMessage: string): Promise<string> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: userMessage }] }],
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 4096 },
+      }),
+    },
+  );
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => 'unknown');
+    throw new Error(`Gemini API returned ${response.status}: ${errorBody}`);
+  }
+  const result = await response.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('No text content in Gemini response');
+  return text;
+}
+
+async function callAnthropic(model: string, apiKey: string, systemPrompt: string, userMessage: string): Promise<string> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  });
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => 'unknown');
+    throw new Error(`Anthropic API returned ${response.status}: ${errorBody}`);
+  }
+  const result = await response.json() as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  const textBlock = result.content?.find((block) => block.type === 'text');
+  if (!textBlock?.text) throw new Error('No text content in Anthropic response');
+  return textBlock.text;
+}
+
+async function callOpenAI(model: string, apiKey: string, systemPrompt: string, userMessage: string): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+    }),
+  });
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => 'unknown');
+    throw new Error(`OpenAI API returned ${response.status}: ${errorBody}`);
+  }
+  const result = await response.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const text = result.choices?.[0]?.message?.content;
+  if (!text) throw new Error('No text content in OpenAI response');
+  return text;
+}
+
+async function callAI(
+  provider: string, model: string, apiKey: string,
+  systemPrompt: string, userMessage: string,
+): Promise<string> {
+  switch (provider) {
+    case 'gemini': return callGemini(model, apiKey, systemPrompt, userMessage);
+    case 'anthropic': return callAnthropic(model, apiKey, systemPrompt, userMessage);
+    case 'openai': return callOpenAI(model, apiKey, systemPrompt, userMessage);
+    default: throw new Error(`Unknown AI provider: ${provider}`);
+  }
+}
+
 // ---- Health ----
 
 app.get('/api/v1/health', async (c) => {
@@ -797,6 +1003,89 @@ app.post('/api/v1/tours', validateJson(createTourBodySchema), async (c) => {
     },
     201,
   );
+});
+
+app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), async (c) => {
+  const { name, description } = c.req.valid('json');
+  const provider = (c.env.AI_PROVIDER || 'gemini').toLowerCase();
+  const model = c.env.AI_MODEL || DEFAULT_AI_MODELS[provider] || DEFAULT_AI_MODELS.gemini;
+
+  const apiKeyMap: Record<string, string | undefined> = {
+    gemini: c.env.GEMINI_API_KEY,
+    anthropic: c.env.ANTHROPIC_API_KEY,
+    openai: c.env.OPENAI_API_KEY,
+  };
+  const apiKey = apiKeyMap[provider];
+
+  if (!apiKey) {
+    throw new AppHttpError(503, {
+      code: 'AI_SERVICE_UNAVAILABLE',
+      message: 'AI 검색 서비스가 설정되지 않았습니다.',
+    });
+  }
+
+  const userMessage = description
+    ? `투어 이름: ${name}\n투어 설명: ${description}`
+    : `투어 이름: ${name}`;
+
+  let aiResponseText: string;
+  try {
+    aiResponseText = await callAI(provider, model, apiKey, TOUR_SEARCH_SYSTEM_PROMPT, userMessage);
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        type: 'AISearchError',
+        provider,
+        model,
+        message: err instanceof Error ? err.message : String(err),
+        traceId: c.get('traceId'),
+      }),
+    );
+    throw new AppHttpError(502, {
+      code: 'AI_REQUEST_FAILED',
+      message: 'AI 서비스 요청에 실패했습니다. 잠시 후 다시 시도해주세요.',
+    });
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = extractJSON(aiResponseText);
+  } catch {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        type: 'AIResponseParseError',
+        raw: aiResponseText.slice(0, 500),
+        traceId: c.get('traceId'),
+      }),
+    );
+    throw new AppHttpError(502, {
+      code: 'AI_RESPONSE_INVALID',
+      message: 'AI 응답을 파싱할 수 없습니다. 다시 시도해주세요.',
+    });
+  }
+
+  const validation = aiTourResponseSchema.safeParse(parsed);
+  if (!validation.success) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        type: 'AIResponseValidationError',
+        issues: validation.error.issues,
+        traceId: c.get('traceId'),
+      }),
+    );
+    throw new AppHttpError(502, {
+      code: 'AI_RESPONSE_INVALID',
+      message: 'AI 응답이 올바른 형식이 아닙니다. 다시 시도해주세요.',
+    });
+  }
+
+  return c.json<ApiSuccess<{ tour: z.infer<typeof aiTourResponseSchema> }>>({
+    success: true,
+    data: { tour: validation.data },
+  });
 });
 
 app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => {
