@@ -167,6 +167,7 @@ select {
   font-size: 14px;
   color: var(--color-text);
   transition: border-color 0.15s;
+  box-sizing: border-box;
 }
 
 input:focus,
@@ -889,6 +890,8 @@ progress {
 .reg-label textarea {
   font-weight: 400;
   font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .reg-label textarea {
@@ -898,6 +901,7 @@ progress {
   background: var(--color-surface);
   resize: vertical;
   font-family: inherit;
+  box-sizing: border-box;
 }
 
 .required {
@@ -1042,6 +1046,8 @@ progress {
 .reg-spot-form input {
   font-size: 13px;
   padding: 6px 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .btn-add {
