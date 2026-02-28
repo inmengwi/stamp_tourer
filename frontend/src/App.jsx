@@ -695,7 +695,7 @@ export function App() {
                   <p>{tour.description}</p>
                 </div>
                 <div className="stack-actions">
-                  <button className="btn-outline" onClick={() => openDetail(tour.id)}>상세 보기</button>
+                  <button className="btn-outline" onClick={() => openProgress(tour.id)}>진행 상세</button>
                   <div className="stack-actions-row">
                     <button className="btn" onClick={() => onToggleWishlist(tour.id)}>{wishlist.includes(tour.id) ? '찜 해제' : '♥ 찜'}</button>
                     <button className="btn-accent" onClick={() => onJoinTour(tour.id)}>참여</button>
@@ -1200,7 +1200,7 @@ export function App() {
             <li key={tour.id} className="tour-card completed-tour">
               <div><strong>{tour.title}</strong></div>
               <div className="stack-actions">
-                <button className="btn-outline" onClick={() => openDetail(tour.id)}>상세 보기</button>
+                <button className="btn-outline" onClick={() => openProgress(tour.id)}>진행 상세</button>
               </div>
             </li>
           ))}</ul>
