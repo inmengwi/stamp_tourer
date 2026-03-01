@@ -12,6 +12,8 @@ export const clearAuthToken = () => {
   _authToken = null;
 };
 
+export const getAuthToken = () => _authToken;
+
 export class ApiRequestError extends Error {
   constructor(message, { status, code, details, traceId } = {}) {
     super(message || DEFAULT_ERROR);

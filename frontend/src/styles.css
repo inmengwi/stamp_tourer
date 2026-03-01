@@ -1029,6 +1029,73 @@ progress {
   to { transform: rotate(360deg); }
 }
 
+/* AI Progress Log */
+.ai-log-list {
+  list-style: none;
+  padding: 0;
+  margin: 20px auto 0;
+  max-width: 360px;
+  text-align: left;
+}
+
+.ai-log-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  animation: fadeInLog 0.3s ease;
+}
+
+.ai-log-item:last-child {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.ai-log-complete {
+  color: var(--color-success) !important;
+  font-weight: 500;
+}
+
+.ai-log-icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.ai-log-item:last-child .ai-log-icon {
+  color: var(--color-accent);
+  animation: pulse 1.2s ease infinite;
+}
+
+.ai-log-complete .ai-log-icon {
+  color: var(--color-success);
+  animation: none;
+}
+
+.ai-log-msg {
+  flex: 1;
+}
+
+.ai-log-detail {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+@keyframes fadeInLog {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* Edit Form — Mobile-first: single column */
 .reg-form-grid {
   display: grid;
