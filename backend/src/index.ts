@@ -563,7 +563,7 @@ const GROUNDING_PROMPT_ADDENDUM = `
 - 공식 웹사이트나 네이버/카카오 지도 정보를 우선 참고하세요.`;
 
 const DEFAULT_AI_MODELS: Record<string, string> = {
-  gemini: 'gemini-2.5-flash',
+  gemini: 'gemini-3.1-pro-preview',
   anthropic: 'claude-sonnet-4-20250514',
   openai: 'gpt-4o-mini',
 };
