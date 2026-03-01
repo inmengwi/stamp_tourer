@@ -9,7 +9,7 @@ import {
   SORT_OPTIONS,
   VERIFICATION_OPTIONS,
 } from './data';
-import { createTour, getTourDetail, getTours, searchTourOnline, searchTourOnlineWithLogs } from './api/toursApi';
+import { createTour, getTourDetail, getTours, searchTourOnline, searchTourOnlineWithLogs, searchTourMetadataWithLogs, organizeTourSpotsWithLogs } from './api/toursApi';
 import { completeTourParticipation, joinTour, toggleTourWishlist } from './api/participationApi';
 import { createStampRecord } from './api/stampsApi';
 import { getSchedules, upsertSchedule } from './api/schedulesApi';
@@ -76,7 +76,7 @@ export function App() {
   const [recordMethod, setRecordMethod] = useState('manual');
   const [recordMemo, setRecordMemo] = useState('');
 
-  const [registerStep, setRegisterStep] = useState('input');
+  const [registerStep, setRegisterStep] = useState('input'); // input | searching | review | organizing | loading | edit
   const [searchName, setSearchName] = useState('');
   const [searchDesc, setSearchDesc] = useState('');
   const [registerForm, setRegisterForm] = useState(null);
@@ -85,6 +85,8 @@ export function App() {
   const [editMilestones, setEditMilestones] = useState([]);
   const [editNotices, setEditNotices] = useState([]);
   const [aiLogs, setAiLogs] = useState([]);
+  const [tourMetadata, setTourMetadata] = useState(null);
+  const [localMatch, setLocalMatch] = useState(null);
 
   // ---- User / Auth State ----
   const [currentUser, setCurrentUser] = useState(null); // { id, email, nickname }
@@ -335,6 +337,141 @@ export function App() {
     return tour.spots ?? [];
   };
 
+  const applyTourMetadata = (t) => {
+    setRegisterForm({
+      title: t.title,
+      description: t.description,
+      category: t.category,
+      regionCode: t.regionCode,
+      difficulty: t.difficulty,
+      duration: t.duration,
+      budget: t.budget,
+      period: t.period,
+      status: t.status,
+      reward: t.reward,
+      estimatedHours: t.estimatedHours,
+      estimatedCost: t.estimatedCost,
+      organizer: t.organizer,
+      targetAudience: t.targetAudience,
+      verificationMethods: [...(t.verificationMethods || ['manual'])],
+      contactPhone: t.contactInfo?.phone || '',
+      contactEmail: t.contactInfo?.email || '',
+      contactWebsite: t.contactInfo?.website || '',
+      tags: (t.tags || []).join(', '),
+      thumbnailEmoji: t.thumbnailEmoji || '📍',
+    });
+    setEditMilestones(t.milestones ? [...t.milestones] : []);
+    setEditNotices(t.notices ? [...t.notices] : []);
+  };
+
+  const applyTourSpots = (spotsData) => {
+    if (spotsData.subTours && spotsData.subTours.length > 0) {
+      setOnlineStructure(spotsData.subTours);
+      const spots = spotsData.subTours.flatMap((subTour) =>
+        subTour.stamps.map((stamp) => ({
+          ...stamp,
+          subTourTitle: subTour.title,
+        })),
+      );
+      setEditSpots(spots.map((s) => ({ ...s, id: crypto.randomUUID() })));
+    } else if (spotsData.spots) {
+      setOnlineStructure([]);
+      setEditSpots(spotsData.spots.map((s) => ({ ...s, id: crypto.randomUUID() })));
+    }
+  };
+
+  const searchTourMetadata = async () => {
+    if (!searchName.trim()) {
+      alert('투어 이름을 입력해주세요.');
+      return;
+    }
+    setRegisterStep('searching');
+    setAiLogs([]);
+    setTourMetadata(null);
+    setLocalMatch(null);
+
+    try {
+      const data = await searchTourMetadataWithLogs(searchName, searchDesc, (log) => {
+        setAiLogs((prev) => [...prev, { ...log, timestamp: Date.now() }]);
+      });
+      const meta = data.tour;
+      setTourMetadata(meta);
+      applyTourMetadata(meta);
+      setRegisterStep('review');
+    } catch (error) {
+      console.warn('AI metadata search failed, falling back to local DB:', error.message);
+      setAiLogs((prev) => [...prev, { step: 'fallback', message: '로컬 데이터베이스에서 검색합니다...', timestamp: Date.now() }]);
+      const query = `${searchName} ${searchDesc}`.toLowerCase();
+      const match = ONLINE_TOUR_DB.find((entry) =>
+        entry.keywords.some((kw) => query.includes(kw)),
+      );
+      if (match) {
+        setLocalMatch(match.tour);
+        setTourMetadata(match.tour);
+        applyTourMetadata(match.tour);
+        setRegisterStep('review');
+      } else {
+        setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
+        setEditSpots([]);
+        setOnlineStructure([]);
+        setEditMilestones([]);
+        setEditNotices([]);
+        setRegisterStep('edit');
+      }
+    }
+  };
+
+  const organizeSpots = async () => {
+    setRegisterStep('organizing');
+    setAiLogs([]);
+
+    if (localMatch) {
+      // 로컬 DB 폴백: subTours가 있으면 그대로, 없으면 단일 서브투어로 래핑
+      setAiLogs([{ step: 'fallback', message: '로컬 데이터베이스에서 장소를 정리합니다...', timestamp: Date.now() }]);
+      if (localMatch.subTours && localMatch.subTours.length > 0) {
+        applyTourSpots({ subTours: localMatch.subTours });
+      } else {
+        const spots = localMatch.spots ?? [];
+        applyTourSpots({
+          subTours: spots.length > 0
+            ? [{ id: 'main', title: localMatch.title || '전체 코스', description: '', stamps: spots }]
+            : [],
+        });
+      }
+      setRegisterStep('edit');
+      return;
+    }
+
+    const meta = tourMetadata || registerForm;
+    if (!meta) {
+      setRegisterStep('edit');
+      return;
+    }
+
+    try {
+      const data = await organizeTourSpotsWithLogs(
+        {
+          title: meta.title,
+          description: meta.description,
+          category: meta.category,
+          tourType: meta.tourType,
+          organizer: meta.organizer,
+        },
+        (log) => {
+          setAiLogs((prev) => [...prev, { ...log, timestamp: Date.now() }]);
+        },
+      );
+      applyTourSpots(data);
+    } catch (error) {
+      console.warn('AI spot organization failed:', error.message);
+      setEditSpots([]);
+      setOnlineStructure([]);
+    }
+
+    setRegisterStep('edit');
+  };
+
+  // 기존 통합 검색 (하위 호환성)
   const searchOnline = async () => {
     if (!searchName.trim()) {
       alert('투어 이름을 입력해주세요.');
@@ -343,41 +480,13 @@ export function App() {
     setRegisterStep('loading');
     setAiLogs([]);
 
-    const applyTourData = (t) => {
-      setRegisterForm({
-        title: t.title,
-        description: t.description,
-        category: t.category,
-        regionCode: t.regionCode,
-        difficulty: t.difficulty,
-        duration: t.duration,
-        budget: t.budget,
-        period: t.period,
-        status: t.status,
-        reward: t.reward,
-        estimatedHours: t.estimatedHours,
-        estimatedCost: t.estimatedCost,
-        organizer: t.organizer,
-        targetAudience: t.targetAudience,
-        verificationMethods: [...(t.verificationMethods || ['manual'])],
-        contactPhone: t.contactInfo?.phone || '',
-        contactEmail: t.contactInfo?.email || '',
-        contactWebsite: t.contactInfo?.website || '',
-        tags: (t.tags || []).join(', '),
-        thumbnailEmoji: t.thumbnailEmoji || '📍',
-      });
-      const spotsFromResult = extractSpotsFromTour(t);
-      setEditSpots(spotsFromResult.map((s) => ({ ...s, id: crypto.randomUUID() })));
-      setOnlineStructure(t.subTours ?? []);
-      setEditMilestones(t.milestones ? [...t.milestones] : []);
-      setEditNotices(t.notices ? [...t.notices] : []);
-    };
-
     try {
       const data = await searchTourOnlineWithLogs(searchName, searchDesc, (log) => {
         setAiLogs((prev) => [...prev, { ...log, timestamp: Date.now() }]);
       });
-      applyTourData(data.tour);
+      const t = data.tour;
+      applyTourMetadata(t);
+      applyTourSpots(t);
     } catch (error) {
       console.warn('AI search failed, falling back to local DB:', error.message);
       setAiLogs((prev) => [...prev, { step: 'fallback', message: '로컬 데이터베이스에서 검색합니다...', timestamp: Date.now() }]);
@@ -386,7 +495,10 @@ export function App() {
         entry.keywords.some((kw) => query.includes(kw)),
       );
       if (match) {
-        applyTourData(match.tour);
+        applyTourMetadata(match.tour);
+        const spotsFromResult = extractSpotsFromTour(match.tour);
+        setEditSpots(spotsFromResult.map((s) => ({ ...s, id: crypto.randomUUID() })));
+        setOnlineStructure(match.tour.subTours ?? []);
       } else {
         setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
         setEditSpots([]);
@@ -461,6 +573,8 @@ export function App() {
     setEditNotices([]);
     setOnlineStructure([]);
     setAiLogs([]);
+    setTourMetadata(null);
+    setLocalMatch(null);
   };
 
   const onSubmitRegistration = async () => {
@@ -939,7 +1053,7 @@ export function App() {
           </div>
 
           <div className="reg-actions">
-            <button className="btn-search" onClick={searchOnline}>온라인 조회</button>
+            <button className="btn-search" onClick={searchTourMetadata}>온라인 조회</button>
             <button
               className="btn-manual"
               onClick={() => {
@@ -976,11 +1090,96 @@ export function App() {
         </section>
       )}
 
-      {currentPage === 'register' && registerStep === 'loading' && (
+      {currentPage === 'register' && (registerStep === 'loading' || registerStep === 'searching') && (
         <section className="card reg-loading">
           <div className="spinner" />
-          <h3>AI가 투어 정보를 생성하고 있습니다...</h3>
+          <h3>{registerStep === 'searching' ? 'AI가 투어를 검색하고 있습니다...' : 'AI가 투어 정보를 생성하고 있습니다...'}</h3>
           <p className="helper">"{searchName}" 관련 정보를 검색하고 있습니다.</p>
+          {aiLogs.length > 0 && (
+            <ul className="ai-log-list">
+              {aiLogs.map((log, i) => (
+                <li key={i} className={`ai-log-item ai-log-${log.step}`}>
+                  <span className="ai-log-icon">
+                    {log.step === 'complete' ? '\u2713' : log.step === 'error' || log.step === 'fallback' ? '!' : i < aiLogs.length - 1 ? '\u2713' : '\u25CF'}
+                  </span>
+                  <span className="ai-log-msg">{log.message}</span>
+                  {log.detail && <span className="ai-log-detail">{log.detail}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {currentPage === 'register' && registerStep === 'review' && registerForm && (
+        <section className="detail-page">
+          <div className="detail-header detail-header--edit">
+            <button className="back-btn" onClick={resetRegister}>← 다시 검색</button>
+            <h2 className="detail-title">투어 검색 결과</h2>
+            <p className="helper text-center">
+              검색된 투어 정보를 확인하세요. 확인 후 방문 장소를 정리합니다.
+            </p>
+          </div>
+
+          <div className="detail-section">
+            <h3>{registerForm.thumbnailEmoji} {registerForm.title}</h3>
+            <p>{registerForm.description}</p>
+
+            <div className="detail-grid">
+              <div><strong>카테고리:</strong> {CATEGORY_OPTIONS.find((o) => o.value === registerForm.category)?.label || registerForm.category}</div>
+              <div><strong>지역:</strong> {registerForm.regionCode}</div>
+              <div><strong>난이도:</strong> {DIFFICULTY_OPTIONS.find((o) => o.value === registerForm.difficulty)?.label || registerForm.difficulty}</div>
+              <div><strong>기간:</strong> {DURATION_OPTIONS.find((o) => o.value === registerForm.duration)?.label || registerForm.duration}</div>
+              <div><strong>예산:</strong> {registerForm.estimatedCost}</div>
+              <div><strong>소요 시간:</strong> {registerForm.estimatedHours}시간</div>
+              <div><strong>주최:</strong> {registerForm.organizer || '-'}</div>
+              <div><strong>대상:</strong> {registerForm.targetAudience}</div>
+              {tourMetadata?.tourType && <div><strong>투어 구조:</strong> {tourMetadata.tourType}</div>}
+              {tourMetadata?.estimatedSpotCount > 0 && <div><strong>예상 장소 수:</strong> {tourMetadata.estimatedSpotCount}개</div>}
+            </div>
+          </div>
+
+          {registerForm.reward && (
+            <div className="detail-section">
+              <h3>보상 정보</h3>
+              <p><strong>완주 보상:</strong> {registerForm.reward}</p>
+              {editMilestones.length > 0 && (
+                <ul className="milestone-preview-list">
+                  {editMilestones.map((ms, i) => (
+                    <li key={i}>{ms.stampCount}개 달성 → {ms.reward}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {editNotices.length > 0 && (
+            <div className="detail-section">
+              <h3>주의사항</h3>
+              <ul className="notice-preview-list">
+                {editNotices.map((notice, i) => (
+                  <li key={i}>{notice}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="reg-actions">
+            <button className="btn-primary" onClick={organizeSpots}>방문 장소 정리</button>
+            <button className="btn-manual" onClick={() => {
+              setEditSpots([]);
+              setOnlineStructure([]);
+              setRegisterStep('edit');
+            }}>직접 장소 입력</button>
+          </div>
+        </section>
+      )}
+
+      {currentPage === 'register' && registerStep === 'organizing' && (
+        <section className="card reg-loading">
+          <div className="spinner" />
+          <h3>AI가 방문 장소를 정리하고 있습니다...</h3>
+          <p className="helper">"{registerForm?.title || searchName}"의 방문 장소를 서브투어 구조로 정리하고 있습니다.</p>
           {aiLogs.length > 0 && (
             <ul className="ai-log-list">
               {aiLogs.map((log, i) => (

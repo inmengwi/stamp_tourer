@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Context, Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { streamSSE } from 'hono/streaming';
@@ -483,6 +483,68 @@ const aiTourResponseSchema = z.object({
   })).default([]),
 });
 
+const aiTourMetadataSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).default(''),
+  category: z.enum(['railway', 'sightseeing', 'festival', 'local', 'theme']).default('sightseeing'),
+  regionCode: z.string().max(30).default('서울'),
+  difficulty: z.enum(['beginner', 'mid', 'expert']).default('beginner'),
+  duration: z.enum(['day', 'weekend', 'long']).default('day'),
+  budget: z.enum(['low', 'mid', 'high']).default('low'),
+  period: z.enum(['active', 'always', 'upcoming']).default('always'),
+  status: z.enum(['planned', 'active', 'ended']).default('active'),
+  reward: z.string().max(200).default(''),
+  estimatedHours: z.number().min(0).default(4),
+  estimatedCost: z.string().max(50).default('₩0'),
+  organizer: z.string().max(200).default(''),
+  targetAudience: z.string().max(200).default('누구나'),
+  verificationMethods: z.array(z.enum(['manual', 'gps', 'qr', 'photo'])).default(['manual']),
+  milestones: z.array(z.object({
+    stampCount: z.number().min(1),
+    reward: z.string().max(200),
+  })).default([]),
+  notices: z.array(z.string().max(500)).default([]),
+  contactInfo: z.object({
+    phone: z.string().default(''),
+    email: z.string().default(''),
+    website: z.string().default(''),
+  }).default({ phone: '', email: '', website: '' }),
+  tags: z.array(z.string().max(50)).default([]),
+  thumbnailEmoji: z.string().max(10).default('📍'),
+  estimatedSpotCount: z.number().min(0).default(0),
+  tourType: z.string().max(50).default('코스별'),
+});
+
+const aiSpotSchema = z.object({
+  name: z.string().min(1).max(200),
+  address: z.string().max(300).default(''),
+  roadAddress: z.string().max(300).default(''),
+  openHours: z.string().max(100).default(''),
+  description: z.string().max(500).default(''),
+  lat: z.number().min(33).max(39).optional(),
+  lng: z.number().min(124).max(132).optional(),
+  verificationTypes: z.array(z.string()).default(['manual']),
+});
+
+const aiSubTourSchema = z.object({
+  id: z.string().min(1).max(100),
+  title: z.string().min(1).max(200),
+  description: z.string().max(500).default(''),
+  stamps: z.array(aiSpotSchema).min(1),
+});
+
+const aiTourSpotsResponseSchema = z.object({
+  subTours: z.array(aiSubTourSchema).min(1),
+});
+
+const organizeBodySchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  category: z.string().max(50).optional(),
+  tourType: z.string().max(50).optional(),
+  organizer: z.string().max(200).optional(),
+});
+
 // ---- AI Tour Search ----
 
 const TOUR_SEARCH_SYSTEM_PROMPT = `당신은 한국의 스탬프 투어 전문가입니다. 사용자가 투어 이름과 설명을 제공하면, 해당 투어에 대한 상세 정보를 JSON 형식으로 생성합니다.
@@ -561,6 +623,108 @@ const GROUNDING_PROMPT_ADDENDUM = `
 - 검색 결과에서 확인된 실제 도로명주소, 운영시간, 좌표를 우선 사용하세요.
 - 검색으로 확인할 수 없는 정보는 빈 문자열로 두세요.
 - 공식 웹사이트나 네이버/카카오 지도 정보를 우선 참고하세요.`;
+
+const TOUR_METADATA_SYSTEM_PROMPT = `당신은 한국의 스탬프 투어 전문가입니다. 사용자가 투어 이름과 설명을 제공하면, 해당 투어에 대한 기본 메타데이터 정보를 JSON 형식으로 생성합니다.
+
+## 규칙
+1. 반드시 유효한 JSON만 출력하세요. 설명이나 마크다운 없이 순수 JSON만 반환합니다.
+2. 한국의 실제 장소, 관광지, 문화유산, 축제, 철도 등에 대한 지식을 활용하세요.
+3. 알 수 없는 투어라면, 사용자가 제공한 이름과 설명을 바탕으로 합리적인 투어 정보를 생성하세요.
+4. 모든 텍스트는 한국어로 작성하세요.
+5. **중요: 방문 장소(spots)는 포함하지 마세요.** 투어 메타데이터만 생성합니다.
+6. estimatedSpotCount: 이 투어에 포함될 것으로 예상되는 방문 장소 수를 추정하세요.
+7. tourType: 투어의 구조 유형을 다음 중 하나로 지정하세요:
+   - "코스별": 여러 코스/길로 구성 (예: 국가유산 방문자여권의 궁궐길, 왕릉길 등)
+   - "지역별": 지역 단위로 구성 (예: 서울권, 부산권 등)
+   - "테마별": 테마 단위로 구성 (예: 역사, 자연, 미식 등)
+   - "단일코스": 하나의 코스로 구성된 투어
+
+## 출력 JSON 스키마
+{
+  "title": "투어 제목 (string)",
+  "description": "투어 상세 설명 (string, 2~3문장)",
+  "category": "railway | sightseeing | festival | local | theme 중 하나",
+  "regionCode": "서울 | 부산 | 제주 | 경기 | 강원 | 충북 | 충남 | 전북 | 전남 | 경북 | 경남 | 인천 | 대전 | 대구 | 광주 | 울산 | 세종 중 하나",
+  "difficulty": "beginner | mid | expert 중 하나",
+  "duration": "day | weekend | long 중 하나",
+  "budget": "low | mid | high 중 하나",
+  "period": "active | always | upcoming 중 하나",
+  "status": "planned | active | ended 중 하나",
+  "reward": "최종 보상 설명 (string)",
+  "estimatedHours": 예상 소요 시간 (number),
+  "estimatedCost": "예상 비용 (string, 예: ₩15,000)",
+  "organizer": "주최 기관 (string)",
+  "targetAudience": "대상 (string, 예: 누구나)",
+  "verificationMethods": ["manual", "gps", "qr", "photo" 중 해당하는 것들],
+  "milestones": [
+    { "stampCount": number, "reward": "보상 설명" }
+  ],
+  "notices": ["주의사항1", "주의사항2"],
+  "contactInfo": {
+    "phone": "전화번호",
+    "email": "이메일",
+    "website": "웹사이트 URL"
+  },
+  "tags": ["태그1", "태그2"],
+  "thumbnailEmoji": "대표 이모지 1개",
+  "estimatedSpotCount": 예상 방문 장소 수 (number),
+  "tourType": "코스별 | 지역별 | 테마별 | 단일코스 중 하나"
+}`;
+
+const TOUR_SPOTS_SYSTEM_PROMPT = `당신은 한국의 스탬프 투어 전문가입니다. 사용자가 투어 정보를 제공하면, 해당 투어의 방문 장소들을 서브투어(코스/테마/지역) 구조로 정리하여 JSON 형식으로 생성합니다.
+
+## 규칙
+1. 반드시 유효한 JSON만 출력하세요. 설명이나 마크다운 없이 순수 JSON만 반환합니다.
+2. 한국의 실제 장소, 관광지, 문화유산, 축제, 철도 등에 대한 지식을 활용하세요.
+3. 모든 텍스트는 한국어로 작성하세요.
+4. **중요: 반드시 subTours 배열로 장소를 구조화하세요.**
+
+## 서브투어 구조화 규칙
+- 투어 유형에 따라 적절히 서브투어를 나누세요:
+  - 코스별: 코스/길 단위 (예: 궁궐길, 왕릉길 등)
+  - 지역별: 지역 단위 (예: 서울권, 부산권, 제주권 등)
+  - 테마별: 테마 단위 (예: 역사유적, 자연경관, 미식체험 등)
+  - 단일코스: 하나의 서브투어에 모든 장소를 포함
+- 각 서브투어에는 최소 2개, 최대 10개의 장소(stamps)를 포함하세요.
+- 전체 장소 수는 최소 3개, 최대 30개를 포함하세요.
+
+## 주소 규칙 (매우 중요)
+- 모든 주소는 반드시 대한민국 도로명주소 형식을 사용하세요.
+- 올바른 형식 예시: "서울특별시 종로구 사직로 161", "부산광역시 해운대구 해운대해변로 264"
+- 주소를 확신할 수 없는 경우, address와 roadAddress 필드를 빈 문자열("")로 두세요.
+
+## 좌표 규칙
+- 각 장소의 위도(lat)와 경도(lng)를 소수점 6자리까지 제공하세요.
+- 대한민국 좌표 범위: 위도 33.0~38.7, 경도 124.5~131.9
+- 좌표를 확신할 수 없는 경우, lat과 lng 필드를 생략하세요.
+
+## 운영시간 규칙
+- 운영시간은 "HH:MM-HH:MM" 형식을 사용하세요 (예: "09:00-18:00").
+- 24시간 운영: "00:00-24:00", 상시 개방: "상시"
+- 운영시간을 확신할 수 없는 경우 빈 문자열("")로 두세요.
+
+## 출력 JSON 스키마
+{
+  "subTours": [
+    {
+      "id": "고유 ID (string, 예: course-1, region-seoul)",
+      "title": "서브투어 제목 (string, 예: 궁궐길 (서울))",
+      "description": "서브투어 설명 (string, 1문장)",
+      "stamps": [
+        {
+          "name": "장소명",
+          "address": "도로명주소 (확실한 경우만)",
+          "roadAddress": "도로명주소 (확실한 경우만)",
+          "openHours": "운영시간 (예: 09:00-18:00)",
+          "description": "장소 설명 (1~2문장)",
+          "lat": 위도 (number, 확실한 경우만),
+          "lng": 경도 (number, 확실한 경우만),
+          "verificationTypes": ["manual", "gps", "qr", "photo" 중 해당하는 것들]
+        }
+      ]
+    }
+  ]
+}`;
 
 const DEFAULT_AI_MODELS: Record<string, string> = {
   gemini: 'gemini-3.1-pro-preview',
@@ -753,6 +917,198 @@ async function callAI(
     case 'openai': return callOpenAI(model, apiKey, systemPrompt, userMessage, maxTokens);
     default: throw new Error(`Unknown AI provider: ${provider}`);
   }
+}
+
+interface AiStreamLogMessages {
+  init: string;
+  prompt: string;
+  generating: string;
+  parsing: string;
+  validating: string;
+  complete: (data: unknown) => string;
+}
+
+async function handleAiStreamRequest<T>(
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  systemPromptBase: string,
+  userMessage: string,
+  schema: z.ZodType<T>,
+  logMessages: AiStreamLogMessages,
+  resultMapper: (data: T) => unknown,
+) {
+  const provider = (c.env.AI_PROVIDER || 'gemini').toLowerCase();
+  const model = c.env.AI_MODEL || DEFAULT_AI_MODELS[provider] || DEFAULT_AI_MODELS.gemini;
+
+  const apiKeyMap: Record<string, string | undefined> = {
+    gemini: c.env.GEMINI_API_KEY,
+    anthropic: c.env.ANTHROPIC_API_KEY,
+    openai: c.env.OPENAI_API_KEY,
+  };
+  const apiKey = apiKeyMap[provider];
+
+  if (!apiKey) {
+    throw new AppHttpError(503, {
+      code: 'AI_SERVICE_UNAVAILABLE',
+      message: 'AI 검색 서비스가 설정되지 않았습니다.',
+    });
+  }
+
+  const useGrounding = provider === 'gemini';
+  const systemPrompt = useGrounding
+    ? systemPromptBase + GROUNDING_PROMPT_ADDENDUM
+    : systemPromptBase;
+
+  let sseId = 0;
+  const traceId = c.get('traceId');
+
+  return streamSSE(c, async (stream) => {
+    const sendLog = async (step: string, message: string, detail?: string) => {
+      await stream.writeSSE({
+        event: 'log',
+        data: JSON.stringify({ step, message, detail }),
+        id: String(sseId++),
+      });
+    };
+
+    try {
+      await sendLog('init', logMessages.init);
+
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          type: 'AISearchRequest',
+          provider,
+          model,
+          userMessage,
+          traceId,
+        }),
+      );
+
+      await sendLog('prompt', logMessages.prompt, `${provider} / ${model}`);
+      await sendLog('generating', logMessages.generating);
+
+      let aiResponseText: string;
+      try {
+        aiResponseText = await callAI(provider, model, apiKey, systemPrompt, userMessage, { useGrounding });
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            type: 'AISearchError',
+            provider,
+            model,
+            message: err instanceof Error ? err.message : String(err),
+            traceId,
+          }),
+        );
+        await stream.writeSSE({
+          event: 'error',
+          data: JSON.stringify({
+            code: 'AI_REQUEST_FAILED',
+            message: 'AI 서비스 요청에 실패했습니다. 잠시 후 다시 시도해주세요.',
+          }),
+          id: String(sseId++),
+        });
+        return;
+      }
+
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          type: 'AISearchRawResponse',
+          responseLength: aiResponseText.length,
+          rawResponse: aiResponseText.slice(0, 2000),
+          traceId,
+        }),
+      );
+
+      await sendLog('parsing', logMessages.parsing);
+
+      let parsed: unknown;
+      try {
+        parsed = extractJSON(aiResponseText);
+      } catch {
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            type: 'AIResponseParseError',
+            raw: aiResponseText.slice(0, 500),
+            traceId,
+          }),
+        );
+        await stream.writeSSE({
+          event: 'error',
+          data: JSON.stringify({
+            code: 'AI_RESPONSE_INVALID',
+            message: 'AI 응답을 파싱할 수 없습니다. 다시 시도해주세요.',
+          }),
+          id: String(sseId++),
+        });
+        return;
+      }
+
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          type: 'AISearchParsedJSON',
+          parsed,
+          traceId,
+        }),
+      );
+
+      await sendLog('validating', logMessages.validating);
+
+      const validation = schema.safeParse(parsed);
+      if (!validation.success) {
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            type: 'AIResponseValidationError',
+            issues: validation.error.issues,
+            traceId,
+          }),
+        );
+        await stream.writeSSE({
+          event: 'error',
+          data: JSON.stringify({
+            code: 'AI_RESPONSE_INVALID',
+            message: 'AI 응답이 올바른 형식이 아닙니다. 다시 시도해주세요.',
+          }),
+          id: String(sseId++),
+        });
+        return;
+      }
+
+      const completeMsg = logMessages.complete(validation.data);
+      await sendLog('complete', completeMsg);
+
+      await stream.writeSSE({
+        event: 'result',
+        data: JSON.stringify({
+          success: true,
+          data: resultMapper(validation.data),
+        }),
+        id: String(sseId++),
+      });
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          type: 'AISearchUnexpectedError',
+          message: err instanceof Error ? err.message : String(err),
+          traceId,
+        }),
+      );
+      await stream.writeSSE({
+        event: 'error',
+        data: JSON.stringify({
+          code: 'INTERNAL_ERROR',
+          message: '예상치 못한 오류가 발생했습니다.',
+        }),
+        id: String(sseId++),
+      });
+    }
+  });
 }
 
 // ---- Health ----
@@ -1126,194 +1482,81 @@ app.post('/api/v1/tours', validateJson(createTourBodySchema), async (c) => {
 
 app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), async (c) => {
   const { name, description } = c.req.valid('json');
-  const provider = (c.env.AI_PROVIDER || 'gemini').toLowerCase();
-  const model = c.env.AI_MODEL || DEFAULT_AI_MODELS[provider] || DEFAULT_AI_MODELS.gemini;
-
-  const apiKeyMap: Record<string, string | undefined> = {
-    gemini: c.env.GEMINI_API_KEY,
-    anthropic: c.env.ANTHROPIC_API_KEY,
-    openai: c.env.OPENAI_API_KEY,
-  };
-  const apiKey = apiKeyMap[provider];
-
-  if (!apiKey) {
-    throw new AppHttpError(503, {
-      code: 'AI_SERVICE_UNAVAILABLE',
-      message: 'AI 검색 서비스가 설정되지 않았습니다.',
-    });
-  }
-
   const userMessage = description
     ? `투어 이름: ${name}\n투어 설명: ${description}`
     : `투어 이름: ${name}`;
 
-  const useGrounding = provider === 'gemini';
-  const systemPrompt = useGrounding
-    ? TOUR_SEARCH_SYSTEM_PROMPT + GROUNDING_PROMPT_ADDENDUM
-    : TOUR_SEARCH_SYSTEM_PROMPT;
+  return handleAiStreamRequest(
+    c,
+    TOUR_SEARCH_SYSTEM_PROMPT,
+    userMessage,
+    aiTourResponseSchema,
+    {
+      init: 'AI 서비스를 초기화하고 있습니다...',
+      prompt: 'AI에게 투어 정보 생성을 요청하고 있습니다...',
+      generating: 'AI가 투어 정보를 생성하고 있습니다...',
+      parsing: 'AI 응답을 분석하고 있습니다...',
+      validating: '투어 정보를 검증하고 있습니다...',
+      complete: (data) => `투어 정보 생성 완료! (${(data as z.infer<typeof aiTourResponseSchema>).spots.length}개 스팟)`,
+    },
+    (data) => ({ tour: data }),
+  );
+});
 
-  let sseId = 0;
-  const traceId = c.get('traceId');
+app.post('/api/v1/tours/search-online/metadata', validateJson(searchOnlineBodySchema), async (c) => {
+  const { name, description } = c.req.valid('json');
+  const userMessage = description
+    ? `투어 이름: ${name}\n투어 설명: ${description}`
+    : `투어 이름: ${name}`;
 
-  return streamSSE(c, async (stream) => {
-    const sendLog = async (step: string, message: string, detail?: string) => {
-      await stream.writeSSE({
-        event: 'log',
-        data: JSON.stringify({ step, message, detail }),
-        id: String(sseId++),
-      });
-    };
+  return handleAiStreamRequest(
+    c,
+    TOUR_METADATA_SYSTEM_PROMPT,
+    userMessage,
+    aiTourMetadataSchema,
+    {
+      init: 'AI 서비스를 초기화하고 있습니다...',
+      prompt: 'AI에게 투어 메타데이터 생성을 요청하고 있습니다...',
+      generating: 'AI가 투어 정보를 검색하고 있습니다...',
+      parsing: 'AI 응답을 분석하고 있습니다...',
+      validating: '투어 메타데이터를 검증하고 있습니다...',
+      complete: (data) => {
+        const meta = data as z.infer<typeof aiTourMetadataSchema>;
+        return `투어 검색 완료! (예상 ${meta.estimatedSpotCount}개 장소, ${meta.tourType} 구조)`;
+      },
+    },
+    (data) => ({ tour: data }),
+  );
+});
 
-    try {
-      await sendLog('init', 'AI 서비스를 초기화하고 있습니다...');
+app.post('/api/v1/tours/search-online/organize', validateJson(organizeBodySchema), async (c) => {
+  const { title, description, category, tourType, organizer } = c.req.valid('json');
+  const parts = [`투어 이름: ${title}`];
+  if (description) parts.push(`투어 설명: ${description}`);
+  if (category) parts.push(`카테고리: ${category}`);
+  if (tourType) parts.push(`투어 구조 유형: ${tourType}`);
+  if (organizer) parts.push(`주최: ${organizer}`);
+  const userMessage = parts.join('\n');
 
-      console.log(
-        JSON.stringify({
-          level: 'debug',
-          type: 'AISearchRequest',
-          provider,
-          model,
-          userMessage,
-          traceId,
-        }),
-      );
-
-      await sendLog('prompt', 'AI에게 투어 정보 생성을 요청하고 있습니다...', `${provider} / ${model}`);
-
-      await sendLog('generating', 'AI가 투어 정보를 생성하고 있습니다...');
-
-      let aiResponseText: string;
-      try {
-        aiResponseText = await callAI(provider, model, apiKey, systemPrompt, userMessage, { useGrounding });
-      } catch (err) {
-        console.error(
-          JSON.stringify({
-            level: 'error',
-            type: 'AISearchError',
-            provider,
-            model,
-            message: err instanceof Error ? err.message : String(err),
-            traceId,
-          }),
-        );
-        await stream.writeSSE({
-          event: 'error',
-          data: JSON.stringify({
-            code: 'AI_REQUEST_FAILED',
-            message: 'AI 서비스 요청에 실패했습니다. 잠시 후 다시 시도해주세요.',
-          }),
-          id: String(sseId++),
-        });
-        return;
-      }
-
-      console.log(
-        JSON.stringify({
-          level: 'debug',
-          type: 'AISearchRawResponse',
-          responseLength: aiResponseText.length,
-          rawResponse: aiResponseText.slice(0, 2000),
-          traceId,
-        }),
-      );
-
-      await sendLog('parsing', 'AI 응답을 분석하고 있습니다...');
-
-      let parsed: unknown;
-      try {
-        parsed = extractJSON(aiResponseText);
-      } catch {
-        console.error(
-          JSON.stringify({
-            level: 'error',
-            type: 'AIResponseParseError',
-            raw: aiResponseText.slice(0, 500),
-            traceId,
-          }),
-        );
-        await stream.writeSSE({
-          event: 'error',
-          data: JSON.stringify({
-            code: 'AI_RESPONSE_INVALID',
-            message: 'AI 응답을 파싱할 수 없습니다. 다시 시도해주세요.',
-          }),
-          id: String(sseId++),
-        });
-        return;
-      }
-
-      console.log(
-        JSON.stringify({
-          level: 'debug',
-          type: 'AISearchParsedJSON',
-          parsed,
-          traceId,
-        }),
-      );
-
-      await sendLog('validating', '투어 정보를 검증하고 있습니다...');
-
-      const validation = aiTourResponseSchema.safeParse(parsed);
-      if (!validation.success) {
-        console.error(
-          JSON.stringify({
-            level: 'error',
-            type: 'AIResponseValidationError',
-            issues: validation.error.issues,
-            traceId,
-          }),
-        );
-        await stream.writeSSE({
-          event: 'error',
-          data: JSON.stringify({
-            code: 'AI_RESPONSE_INVALID',
-            message: 'AI 응답이 올바른 형식이 아닙니다. 다시 시도해주세요.',
-          }),
-          id: String(sseId++),
-        });
-        return;
-      }
-
-      console.log(
-        JSON.stringify({
-          level: 'debug',
-          type: 'AISearchValidated',
-          spotsCount: validation.data.spots.length,
-          title: validation.data.title,
-          category: validation.data.category,
-          traceId,
-        }),
-      );
-
-      await sendLog('complete', `투어 정보 생성 완료! (${validation.data.spots.length}개 스팟)`);
-
-      await stream.writeSSE({
-        event: 'result',
-        data: JSON.stringify({
-          success: true,
-          data: { tour: validation.data },
-        }),
-        id: String(sseId++),
-      });
-    } catch (err) {
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          type: 'AISearchUnexpectedError',
-          message: err instanceof Error ? err.message : String(err),
-          traceId,
-        }),
-      );
-      await stream.writeSSE({
-        event: 'error',
-        data: JSON.stringify({
-          code: 'INTERNAL_ERROR',
-          message: '예상치 못한 오류가 발생했습니다.',
-        }),
-        id: String(sseId++),
-      });
-    }
-  });
+  return handleAiStreamRequest(
+    c,
+    TOUR_SPOTS_SYSTEM_PROMPT,
+    userMessage,
+    aiTourSpotsResponseSchema,
+    {
+      init: 'AI 서비스를 초기화하고 있습니다...',
+      prompt: 'AI에게 방문 장소 정리를 요청하고 있습니다...',
+      generating: 'AI가 방문 장소를 서브투어 구조로 정리하고 있습니다...',
+      parsing: 'AI 응답을 분석하고 있습니다...',
+      validating: '방문 장소 정보를 검증하고 있습니다...',
+      complete: (data) => {
+        const result = data as z.infer<typeof aiTourSpotsResponseSchema>;
+        const totalStamps = result.subTours.reduce((sum, st) => sum + st.stamps.length, 0);
+        return `방문 장소 정리 완료! (${result.subTours.length}개 서브투어, ${totalStamps}개 장소)`;
+      },
+    },
+    (data) => data,
+  );
 });
 
 app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => {

@@ -24,7 +24,7 @@ export const searchTourOnline = (name, description) =>
     body: { name, description: description || undefined },
   });
 
-export const searchTourOnlineWithLogs = async (name, description, onLog) => {
+async function streamSSERequest(url, body, onLog) {
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'text/event-stream',
@@ -34,10 +34,10 @@ export const searchTourOnlineWithLogs = async (name, description, onLog) => {
 
   let response;
   try {
-    response = await fetch(`${API_BASE_URL}/tours/search-online`, {
+    response = await fetch(`${API_BASE_URL}${url}`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ name, description: description || undefined }),
+      body: JSON.stringify(body),
     });
   } catch {
     throw new ApiRequestError('네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
@@ -93,4 +93,13 @@ export const searchTourOnlineWithLogs = async (name, description, onLog) => {
 
   if (!result) throw new ApiRequestError('스트림이 비정상적으로 종료되었습니다.');
   return result.data;
-};
+}
+
+export const searchTourOnlineWithLogs = (name, description, onLog) =>
+  streamSSERequest('/tours/search-online', { name, description: description || undefined }, onLog);
+
+export const searchTourMetadataWithLogs = (name, description, onLog) =>
+  streamSSERequest('/tours/search-online/metadata', { name, description: description || undefined }, onLog);
+
+export const organizeTourSpotsWithLogs = (tourInfo, onLog) =>
+  streamSSERequest('/tours/search-online/organize', tourInfo, onLog);
