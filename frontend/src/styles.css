@@ -701,6 +701,16 @@ progress {
   margin-top: 4px;
 }
 
+.spot-map-link {
+  color: var(--color-primary, #4a90d9);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.spot-map-link:hover {
+  text-decoration: underline;
+}
+
 .spot-verification {
   display: flex;
   gap: 4px;
