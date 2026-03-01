@@ -534,6 +534,34 @@ const DEFAULT_AI_MODELS: Record<string, string> = {
   openai: 'gpt-4o-mini',
 };
 
+const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
+  // Gemini
+  'gemini-2.5-flash': 65_536,
+  'gemini-2.5-pro': 65_536,
+  'gemini-2.0-flash': 8_192,
+  'gemini-1.5-flash': 8_192,
+  'gemini-1.5-pro': 8_192,
+  // Anthropic
+  'claude-opus-4-20250514': 16_384,
+  'claude-sonnet-4-20250514': 16_384,
+  'claude-haiku-3-5-20241022': 8_192,
+  'claude-3-5-sonnet-20241022': 8_192,
+  // OpenAI
+  'gpt-4o': 16_384,
+  'gpt-4o-mini': 16_384,
+  'gpt-4-turbo': 4_096,
+  'gpt-3.5-turbo': 4_096,
+  'o1': 100_000,
+  'o1-mini': 65_536,
+  'o3-mini': 100_000,
+};
+
+const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
+
+function getMaxOutputTokens(model: string): number {
+  return MODEL_MAX_OUTPUT_TOKENS[model] ?? DEFAULT_MAX_OUTPUT_TOKENS;
+}
+
 function extractJSON(text: string): unknown {
   let jsonStr = text.trim();
   const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -543,7 +571,7 @@ function extractJSON(text: string): unknown {
   return JSON.parse(jsonStr);
 }
 
-async function callGemini(model: string, apiKey: string, systemPrompt: string, userMessage: string): Promise<string> {
+async function callGemini(model: string, apiKey: string, systemPrompt: string, userMessage: string, maxTokens: number): Promise<string> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
@@ -552,7 +580,7 @@ async function callGemini(model: string, apiKey: string, systemPrompt: string, u
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ parts: [{ text: userMessage }] }],
-        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 4096 },
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: maxTokens },
       }),
     },
   );
@@ -568,7 +596,7 @@ async function callGemini(model: string, apiKey: string, systemPrompt: string, u
   return text;
 }
 
-async function callAnthropic(model: string, apiKey: string, systemPrompt: string, userMessage: string): Promise<string> {
+async function callAnthropic(model: string, apiKey: string, systemPrompt: string, userMessage: string, maxTokens: number): Promise<string> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -578,7 +606,7 @@ async function callAnthropic(model: string, apiKey: string, systemPrompt: string
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     }),
@@ -595,7 +623,7 @@ async function callAnthropic(model: string, apiKey: string, systemPrompt: string
   return textBlock.text;
 }
 
-async function callOpenAI(model: string, apiKey: string, systemPrompt: string, userMessage: string): Promise<string> {
+async function callOpenAI(model: string, apiKey: string, systemPrompt: string, userMessage: string, maxTokens: number): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -604,7 +632,7 @@ async function callOpenAI(model: string, apiKey: string, systemPrompt: string, u
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
@@ -628,10 +656,11 @@ async function callAI(
   provider: string, model: string, apiKey: string,
   systemPrompt: string, userMessage: string,
 ): Promise<string> {
+  const maxTokens = getMaxOutputTokens(model);
   switch (provider) {
-    case 'gemini': return callGemini(model, apiKey, systemPrompt, userMessage);
-    case 'anthropic': return callAnthropic(model, apiKey, systemPrompt, userMessage);
-    case 'openai': return callOpenAI(model, apiKey, systemPrompt, userMessage);
+    case 'gemini': return callGemini(model, apiKey, systemPrompt, userMessage, maxTokens);
+    case 'anthropic': return callAnthropic(model, apiKey, systemPrompt, userMessage, maxTokens);
+    case 'openai': return callOpenAI(model, apiKey, systemPrompt, userMessage, maxTokens);
     default: throw new Error(`Unknown AI provider: ${provider}`);
   }
 }
