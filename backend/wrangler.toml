@@ -8,6 +8,7 @@ ACCESS_TOKEN_TTL_SECONDS = "86400"
 JWT_SECRET = "dev-secret-change-in-production"
 CORS_ORIGINS = "https://stamp-tourer.pages.dev,https://*.stamp-tourer.pages.dev"
 AI_PROVIDER = "gemini"
+AI_MODEL = "gemini-2.5-flash"
 
 [[d1_databases]]
 binding = "DB"

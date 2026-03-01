@@ -64,6 +64,8 @@ Cloudflare 대시보드에서 코드 저장소를 연결하면, 브랜치 푸시
 6. Worker 설정에서 환경 변수/시크릿을 추가합니다.
    - Variable: `JWT_ISSUER=stamp-tourer`
    - Variable: `ACCESS_TOKEN_TTL_SECONDS=900`
+   - Variable: `AI_PROVIDER=gemini`
+   - Variable: `AI_MODEL=gemini-2.5-flash` (배포 시 사라지지 않도록 `wrangler.toml`에도 동일하게 관리 권장)
    - Variable(optional): `CORS_ORIGINS=https://admin.example.com,https://app.example.com`
    - Secret: `JWT_ACCESS_SECRET`
    - Secret: `JWT_REFRESH_SECRET`
