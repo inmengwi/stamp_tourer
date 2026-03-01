@@ -9,7 +9,7 @@ import {
   SORT_OPTIONS,
   VERIFICATION_OPTIONS,
 } from './data';
-import { createTour, getTourDetail, getTours, searchTourOnline } from './api/toursApi';
+import { createTour, getTourDetail, getTours, searchTourOnline, searchTourOnlineWithLogs } from './api/toursApi';
 import { completeTourParticipation, joinTour, toggleTourWishlist } from './api/participationApi';
 import { createStampRecord } from './api/stampsApi';
 import { getSchedules, upsertSchedule } from './api/schedulesApi';
@@ -84,6 +84,7 @@ export function App() {
   const [onlineStructure, setOnlineStructure] = useState([]);
   const [editMilestones, setEditMilestones] = useState([]);
   const [editNotices, setEditNotices] = useState([]);
+  const [aiLogs, setAiLogs] = useState([]);
 
   // ---- User / Auth State ----
   const [currentUser, setCurrentUser] = useState(null); // { id, email, nickname }
@@ -340,6 +341,7 @@ export function App() {
       return;
     }
     setRegisterStep('loading');
+    setAiLogs([]);
 
     const applyTourData = (t) => {
       setRegisterForm({
@@ -372,10 +374,13 @@ export function App() {
     };
 
     try {
-      const data = await searchTourOnline(searchName, searchDesc);
+      const data = await searchTourOnlineWithLogs(searchName, searchDesc, (log) => {
+        setAiLogs((prev) => [...prev, { ...log, timestamp: Date.now() }]);
+      });
       applyTourData(data.tour);
     } catch (error) {
       console.warn('AI search failed, falling back to local DB:', error.message);
+      setAiLogs((prev) => [...prev, { step: 'fallback', message: '로컬 데이터베이스에서 검색합니다...', timestamp: Date.now() }]);
       const query = `${searchName} ${searchDesc}`.toLowerCase();
       const match = ONLINE_TOUR_DB.find((entry) =>
         entry.keywords.some((kw) => query.includes(kw)),
@@ -455,6 +460,7 @@ export function App() {
     setEditMilestones([]);
     setEditNotices([]);
     setOnlineStructure([]);
+    setAiLogs([]);
   };
 
   const onSubmitRegistration = async () => {
@@ -950,7 +956,20 @@ export function App() {
         <section className="card reg-loading">
           <div className="spinner" />
           <h3>AI가 투어 정보를 생성하고 있습니다...</h3>
-          <p className="helper">"{searchName}" 관련 정보를 검색하고 있습니다. 잠시만 기다려주세요.</p>
+          <p className="helper">"{searchName}" 관련 정보를 검색하고 있습니다.</p>
+          {aiLogs.length > 0 && (
+            <ul className="ai-log-list">
+              {aiLogs.map((log, i) => (
+                <li key={i} className={`ai-log-item ai-log-${log.step}`}>
+                  <span className="ai-log-icon">
+                    {log.step === 'complete' ? '\u2713' : log.step === 'error' || log.step === 'fallback' ? '!' : i < aiLogs.length - 1 ? '\u2713' : '\u25CF'}
+                  </span>
+                  <span className="ai-log-msg">{log.message}</span>
+                  {log.detail && <span className="ai-log-detail">{log.detail}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 

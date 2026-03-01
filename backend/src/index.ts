@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
+import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 
@@ -1078,104 +1079,167 @@ app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), as
     ? `투어 이름: ${name}\n투어 설명: ${description}`
     : `투어 이름: ${name}`;
 
-  console.log(
-    JSON.stringify({
-      level: 'debug',
-      type: 'AISearchRequest',
-      provider,
-      model,
-      userMessage,
-      traceId: c.get('traceId'),
-    }),
-  );
+  let sseId = 0;
+  const traceId = c.get('traceId');
 
-  let aiResponseText: string;
-  try {
-    aiResponseText = await callAI(provider, model, apiKey, TOUR_SEARCH_SYSTEM_PROMPT, userMessage);
-  } catch (err) {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        type: 'AISearchError',
-        provider,
-        model,
-        message: err instanceof Error ? err.message : String(err),
-        traceId: c.get('traceId'),
-      }),
-    );
-    throw new AppHttpError(502, {
-      code: 'AI_REQUEST_FAILED',
-      message: 'AI 서비스 요청에 실패했습니다. 잠시 후 다시 시도해주세요.',
-    });
-  }
+  return streamSSE(c, async (stream) => {
+    const sendLog = async (step: string, message: string, detail?: string) => {
+      await stream.writeSSE({
+        event: 'log',
+        data: JSON.stringify({ step, message, detail }),
+        id: String(sseId++),
+      });
+    };
 
-  console.log(
-    JSON.stringify({
-      level: 'debug',
-      type: 'AISearchRawResponse',
-      responseLength: aiResponseText.length,
-      rawResponse: aiResponseText.slice(0, 2000),
-      traceId: c.get('traceId'),
-    }),
-  );
+    try {
+      await sendLog('init', 'AI 서비스를 초기화하고 있습니다...');
 
-  let parsed: unknown;
-  try {
-    parsed = extractJSON(aiResponseText);
-  } catch {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        type: 'AIResponseParseError',
-        raw: aiResponseText.slice(0, 500),
-        traceId: c.get('traceId'),
-      }),
-    );
-    throw new AppHttpError(502, {
-      code: 'AI_RESPONSE_INVALID',
-      message: 'AI 응답을 파싱할 수 없습니다. 다시 시도해주세요.',
-    });
-  }
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          type: 'AISearchRequest',
+          provider,
+          model,
+          userMessage,
+          traceId,
+        }),
+      );
 
-  console.log(
-    JSON.stringify({
-      level: 'debug',
-      type: 'AISearchParsedJSON',
-      parsed,
-      traceId: c.get('traceId'),
-    }),
-  );
+      await sendLog('prompt', 'AI에게 투어 정보 생성을 요청하고 있습니다...', `${provider} / ${model}`);
 
-  const validation = aiTourResponseSchema.safeParse(parsed);
-  if (!validation.success) {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        type: 'AIResponseValidationError',
-        issues: validation.error.issues,
-        traceId: c.get('traceId'),
-      }),
-    );
-    throw new AppHttpError(502, {
-      code: 'AI_RESPONSE_INVALID',
-      message: 'AI 응답이 올바른 형식이 아닙니다. 다시 시도해주세요.',
-    });
-  }
+      await sendLog('generating', 'AI가 투어 정보를 생성하고 있습니다...');
 
-  console.log(
-    JSON.stringify({
-      level: 'debug',
-      type: 'AISearchValidated',
-      spotsCount: validation.data.spots.length,
-      title: validation.data.title,
-      category: validation.data.category,
-      traceId: c.get('traceId'),
-    }),
-  );
+      let aiResponseText: string;
+      try {
+        aiResponseText = await callAI(provider, model, apiKey, TOUR_SEARCH_SYSTEM_PROMPT, userMessage);
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            type: 'AISearchError',
+            provider,
+            model,
+            message: err instanceof Error ? err.message : String(err),
+            traceId,
+          }),
+        );
+        await stream.writeSSE({
+          event: 'error',
+          data: JSON.stringify({
+            code: 'AI_REQUEST_FAILED',
+            message: 'AI 서비스 요청에 실패했습니다. 잠시 후 다시 시도해주세요.',
+          }),
+          id: String(sseId++),
+        });
+        return;
+      }
 
-  return c.json<ApiSuccess<{ tour: z.infer<typeof aiTourResponseSchema> }>>({
-    success: true,
-    data: { tour: validation.data },
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          type: 'AISearchRawResponse',
+          responseLength: aiResponseText.length,
+          rawResponse: aiResponseText.slice(0, 2000),
+          traceId,
+        }),
+      );
+
+      await sendLog('parsing', 'AI 응답을 분석하고 있습니다...');
+
+      let parsed: unknown;
+      try {
+        parsed = extractJSON(aiResponseText);
+      } catch {
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            type: 'AIResponseParseError',
+            raw: aiResponseText.slice(0, 500),
+            traceId,
+          }),
+        );
+        await stream.writeSSE({
+          event: 'error',
+          data: JSON.stringify({
+            code: 'AI_RESPONSE_INVALID',
+            message: 'AI 응답을 파싱할 수 없습니다. 다시 시도해주세요.',
+          }),
+          id: String(sseId++),
+        });
+        return;
+      }
+
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          type: 'AISearchParsedJSON',
+          parsed,
+          traceId,
+        }),
+      );
+
+      await sendLog('validating', '투어 정보를 검증하고 있습니다...');
+
+      const validation = aiTourResponseSchema.safeParse(parsed);
+      if (!validation.success) {
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            type: 'AIResponseValidationError',
+            issues: validation.error.issues,
+            traceId,
+          }),
+        );
+        await stream.writeSSE({
+          event: 'error',
+          data: JSON.stringify({
+            code: 'AI_RESPONSE_INVALID',
+            message: 'AI 응답이 올바른 형식이 아닙니다. 다시 시도해주세요.',
+          }),
+          id: String(sseId++),
+        });
+        return;
+      }
+
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          type: 'AISearchValidated',
+          spotsCount: validation.data.spots.length,
+          title: validation.data.title,
+          category: validation.data.category,
+          traceId,
+        }),
+      );
+
+      await sendLog('complete', `투어 정보 생성 완료! (${validation.data.spots.length}개 스팟)`);
+
+      await stream.writeSSE({
+        event: 'result',
+        data: JSON.stringify({
+          success: true,
+          data: { tour: validation.data },
+        }),
+        id: String(sseId++),
+      });
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          type: 'AISearchUnexpectedError',
+          message: err instanceof Error ? err.message : String(err),
+          traceId,
+        }),
+      );
+      await stream.writeSSE({
+        event: 'error',
+        data: JSON.stringify({
+          code: 'INTERNAL_ERROR',
+          message: '예상치 못한 오류가 발생했습니다.',
+        }),
+        id: String(sseId++),
+      });
+    }
   });
 });
 
