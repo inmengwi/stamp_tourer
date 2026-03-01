@@ -513,6 +513,8 @@ export function App() {
         address: s.address,
         openHours: s.openHours,
         description: s.description,
+        lat: s.lat,
+        lng: s.lng,
         verificationTypes: s.verificationTypes || ['manual'],
       })),
     };
@@ -784,6 +786,16 @@ export function App() {
                         <div className="spot-meta">
                           {spot.address && <span>{spot.address}</span>}
                           {spot.openHours && <span>{spot.openHours}</span>}
+                          {spot.lat && spot.lng && (
+                            <a
+                              href={`https://map.kakao.com/link/map/${encodeURIComponent(spot.name)},${spot.lat},${spot.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="spot-map-link"
+                            >
+                              지도 보기
+                            </a>
+                          )}
                         </div>
                       </div>
                     </li>
@@ -849,8 +861,20 @@ export function App() {
                         <div className="spot-number">{idx + 1}</div>
                         <div className="spot-info">
                           <strong>{spot.name}</strong>
-                          {spot.address && (
-                            <div className="spot-meta"><span>{spot.address}</span></div>
+                          {(spot.address || (spot.lat && spot.lng)) && (
+                            <div className="spot-meta">
+                              {spot.address && <span>{spot.address}</span>}
+                              {spot.lat && spot.lng && (
+                                <a
+                                  href={`https://map.kakao.com/link/map/${encodeURIComponent(spot.name)},${spot.lat},${spot.lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="spot-map-link"
+                                >
+                                  지도 보기
+                                </a>
+                              )}
+                            </div>
                           )}
                           <div className="progress-spot-check">
                             <label className="progress-check-label">
@@ -1107,6 +1131,16 @@ export function App() {
                     <input placeholder="주소" value={spot.address} onChange={(e) => updateSpot(index, 'address', e.target.value)} />
                     <input placeholder="운영시간 (예: 09:00-18:00)" value={spot.openHours} onChange={(e) => updateSpot(index, 'openHours', e.target.value)} />
                     <input placeholder="장소 설명" value={spot.description} onChange={(e) => updateSpot(index, 'description', e.target.value)} />
+                    {spot.lat && spot.lng && (
+                      <a
+                        href={`https://map.kakao.com/link/map/${encodeURIComponent(spot.name)},${spot.lat},${spot.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="spot-map-link"
+                      >
+                        지도 보기
+                      </a>
+                    )}
                     <button className="btn-remove" onClick={() => removeSpot(index)}>삭제</button>
                   </div>
                 </li>

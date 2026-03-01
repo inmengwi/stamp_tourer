@@ -379,6 +379,8 @@ const createTourBodySchema = z.object({
     address: z.string().max(200).optional(),
     openHours: z.string().max(100).optional(),
     description: z.string().max(500).optional(),
+    lat: z.number().optional(),
+    lng: z.number().optional(),
     verificationTypes: z.array(z.string()).optional(),
   })).optional(),
   milestones: z.array(z.object({
@@ -472,8 +474,11 @@ const aiTourResponseSchema = z.object({
   spots: z.array(z.object({
     name: z.string().min(1).max(200),
     address: z.string().max(300).default(''),
+    roadAddress: z.string().max(300).default(''),
     openHours: z.string().max(100).default(''),
     description: z.string().max(500).default(''),
+    lat: z.number().min(33).max(39).optional(),
+    lng: z.number().min(124).max(132).optional(),
     verificationTypes: z.array(z.string()).default(['manual']),
   })).default([]),
 });
@@ -488,7 +493,24 @@ const TOUR_SEARCH_SYSTEM_PROMPT = `당신은 한국의 스탬프 투어 전문�
 3. 알 수 없는 투어라면, 사용자가 제공한 이름과 설명을 바탕으로 합리적인 투어 정보를 생성하세요.
 4. 모든 텍스트는 한국어로 작성하세요.
 5. 장소(spots)는 최소 3개, 최대 10개를 포함하세요.
-6. 각 장소의 주소는 가능하면 실제 주소를 사용하세요.
+
+## 주소 규칙 (매우 중요)
+- 모든 주소는 반드시 대한민국 도로명주소 형식을 사용하세요.
+- 올바른 형식 예시: "서울특별시 종로구 사직로 161", "부산광역시 해운대구 해운대해변로 264"
+- 잘못된 형식 예시: "서울 종로구 경복궁 근처", "부산 해운대 해변가"
+- 주소를 확신할 수 없는 경우, address와 roadAddress 필드를 빈 문자열("")로 두세요. 절대 추측하여 존재하지 않는 주소를 생성하지 마세요.
+- roadAddress 필드에도 도로명주소를 기재하세요. address와 동일할 수 있습니다.
+
+## 좌표 규칙
+- 각 장소의 위도(lat)와 경도(lng)를 소수점 6자리까지 제공하세요.
+- 대한민국 좌표 범위: 위도 33.0~38.7, 경도 124.5~131.9
+- 좌표를 확신할 수 없는 경우, lat과 lng 필드를 생략하세요.
+
+## 운영시간 규칙
+- 운영시간은 "HH:MM-HH:MM" 형식을 사용하세요 (예: "09:00-18:00").
+- 24시간 운영: "00:00-24:00"
+- 상시 개방된 야외 장소: "상시"
+- 운영시간을 확신할 수 없는 경우 빈 문자열("")로 두세요.
 
 ## 출력 JSON 스키마
 {
@@ -521,13 +543,24 @@ const TOUR_SEARCH_SYSTEM_PROMPT = `당신은 한국의 스탬프 투어 전문�
   "spots": [
     {
       "name": "장소명",
-      "address": "주소",
-      "openHours": "운영시간 (예: 09:00-18:00)",
-      "description": "장소 설명",
+      "address": "도로명주소 (확실한 경우만)",
+      "roadAddress": "도로명주소 (확실한 경우만)",
+      "openHours": "운영시간 (예: 09:00-18:00, 확실한 경우만)",
+      "description": "장소 설명 (1~2문장)",
+      "lat": 위도 (number, 소수점 6자리, 확실한 경우만),
+      "lng": 경도 (number, 소수점 6자리, 확실한 경우만),
       "verificationTypes": ["manual", "gps", "qr", "photo" 중 해당하는 것들]
     }
   ]
 }`;
+
+const GROUNDING_PROMPT_ADDENDUM = `
+
+## 웹 검색 활용 지침
+- Google 검색을 통해 각 장소의 최신 정보를 확인하세요.
+- 검색 결과에서 확인된 실제 도로명주소, 운영시간, 좌표를 우선 사용하세요.
+- 검색으로 확인할 수 없는 정보는 빈 문자열로 두세요.
+- 공식 웹사이트나 네이버/카카오 지도 정보를 우선 참고하세요.`;
 
 const DEFAULT_AI_MODELS: Record<string, string> = {
   gemini: 'gemini-2.5-flash',
@@ -674,13 +707,48 @@ async function callOpenAI(model: string, apiKey: string, systemPrompt: string, u
   return text;
 }
 
+async function callGeminiWithGrounding(model: string, apiKey: string, systemPrompt: string, userMessage: string, maxTokens: number): Promise<string> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: userMessage }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { maxOutputTokens: maxTokens },
+      }),
+    },
+  );
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => 'unknown');
+    // If grounding is not supported for this model, fall back to standard call
+    if (response.status === 400) {
+      return callGemini(model, apiKey, systemPrompt, userMessage, maxTokens);
+    }
+    throw new Error(`Gemini API (grounded) returned ${response.status}: ${errorBody}`);
+  }
+  const result = await response.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('No text content in grounded Gemini response');
+  return text;
+}
+
 async function callAI(
   provider: string, model: string, apiKey: string,
   systemPrompt: string, userMessage: string,
+  options?: { useGrounding?: boolean },
 ): Promise<string> {
   const maxTokens = getMaxOutputTokens(model);
   switch (provider) {
-    case 'gemini': return callGemini(model, apiKey, systemPrompt, userMessage, maxTokens);
+    case 'gemini':
+      if (options?.useGrounding) {
+        return callGeminiWithGrounding(model, apiKey, systemPrompt, userMessage, maxTokens);
+      }
+      return callGemini(model, apiKey, systemPrompt, userMessage, maxTokens);
     case 'anthropic': return callAnthropic(model, apiKey, systemPrompt, userMessage, maxTokens);
     case 'openai': return callOpenAI(model, apiKey, systemPrompt, userMessage, maxTokens);
     default: throw new Error(`Unknown AI provider: ${provider}`);
@@ -959,15 +1027,15 @@ app.post('/api/v1/tours', validateJson(createTourBodySchema), async (c) => {
     .run();
 
   // Insert spots into tour_spots
-  const spots: Array<{ id: string; name: string; description: string | null; address: string | null; openHours: string | null }> = [];
+  const spots: Array<{ id: string; name: string; description: string | null; address: string | null; openHours: string | null; lat: number | null; lng: number | null }> = [];
   if (body.spots?.length) {
     const stmts = body.spots.map((spot, idx) => {
       const spotId = spot.id || crypto.randomUUID();
-      spots.push({ id: spotId, name: spot.name, description: spot.description ?? null, address: spot.address ?? null, openHours: spot.openHours ?? null });
+      spots.push({ id: spotId, name: spot.name, description: spot.description ?? null, address: spot.address ?? null, openHours: spot.openHours ?? null, lat: spot.lat ?? null, lng: spot.lng ?? null });
       return c.env.DB.prepare(
-        `INSERT INTO tour_spots (id, tour_id, name, description, address, operation_hours, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(spotId, id, spot.name, spot.description ?? null, spot.address ?? null, spot.openHours ?? null, idx, now, now);
+        `INSERT INTO tour_spots (id, tour_id, name, description, address, lat, lng, operation_hours, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(spotId, id, spot.name, spot.description ?? null, spot.address ?? null, spot.lat ?? null, spot.lng ?? null, spot.openHours ?? null, idx, now, now);
     });
     await c.env.DB.batch(stmts);
   }
@@ -1079,6 +1147,11 @@ app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), as
     ? `투어 이름: ${name}\n투어 설명: ${description}`
     : `투어 이름: ${name}`;
 
+  const useGrounding = provider === 'gemini';
+  const systemPrompt = useGrounding
+    ? TOUR_SEARCH_SYSTEM_PROMPT + GROUNDING_PROMPT_ADDENDUM
+    : TOUR_SEARCH_SYSTEM_PROMPT;
+
   let sseId = 0;
   const traceId = c.get('traceId');
 
@@ -1111,7 +1184,7 @@ app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), as
 
       let aiResponseText: string;
       try {
-        aiResponseText = await callAI(provider, model, apiKey, TOUR_SEARCH_SYSTEM_PROMPT, userMessage);
+        aiResponseText = await callAI(provider, model, apiKey, systemPrompt, userMessage, { useGrounding });
       } catch (err) {
         console.error(
           JSON.stringify({
@@ -1287,7 +1360,7 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
 
   // Query tour_spots first, fall back to stamp_spots for legacy data
   const tourSpotsResult = await c.env.DB.prepare(
-    `SELECT id, name, description, address, operation_hours AS openHours
+    `SELECT id, name, description, address, lat, lng, operation_hours AS openHours
      FROM tour_spots
      WHERE tour_id = ?
      ORDER BY sort_order ASC, created_at ASC`,
@@ -1298,16 +1371,20 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
       name: string;
       description: string | null;
       address: string | null;
+      lat: number | null;
+      lng: number | null;
       openHours: string | null;
     }>();
 
-  let spots: Array<{ id: string; name: string; description: string | null; address: string | null; openHours: string | null }>;
+  let spots: Array<{ id: string; name: string; description: string | null; address: string | null; lat: number | null; lng: number | null; openHours: string | null }>;
   if ((tourSpotsResult.results ?? []).length > 0) {
     spots = (tourSpotsResult.results ?? []).map((spot) => ({
       id: spot.id,
       name: spot.name,
       description: spot.description,
       address: spot.address,
+      lat: spot.lat,
+      lng: spot.lng,
       openHours: spot.openHours,
     }));
   } else {
@@ -1331,6 +1408,8 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
       name: spot.name,
       description: null,
       address: spot.address,
+      lat: null,
+      lng: null,
       openHours: spot.openHours,
     }));
   }
