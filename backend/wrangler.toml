@@ -9,7 +9,7 @@ JWT_SECRET = "dev-secret-change-in-production"
 CORS_ORIGINS = "https://stamp-tourer.pages.dev,https://*.stamp-tourer.pages.dev"
 # AI_PROVIDER와 AI_MODEL은 Cloudflare 대시보드에서 설정합니다.
 # wrangler.toml에 지정하면 배포 시 대시보드 값을 덮어쓰므로 여기에 두지 않습니다.
-# 미설정 시 기본값: AI_PROVIDER=gemini, AI_MODEL=gemini-2.5-flash
+# 미설정 시 기본값: AI_PROVIDER=gemini, AI_MODEL=gemini-3.1-pro-preview
 
 [[d1_databases]]
 binding = "DB"

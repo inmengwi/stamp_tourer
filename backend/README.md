@@ -65,7 +65,7 @@ Cloudflare 대시보드에서 코드 저장소를 연결하면, 브랜치 푸시
    - Variable: `JWT_ISSUER=stamp-tourer`
    - Variable: `ACCESS_TOKEN_TTL_SECONDS=900`
    - Variable: `AI_PROVIDER=gemini` (Cloudflare 대시보드에서만 설정, `wrangler.toml`에 두면 배포 시 덮어씀)
-   - Variable: `AI_MODEL=gemini-2.5-flash` (Cloudflare 대시보드에서만 설정, 미설정 시 provider별 기본 모델 사용)
+   - Variable: `AI_MODEL=gemini-3.1-pro-preview` (Cloudflare 대시보드에서만 설정, 미설정 시 provider별 기본 모델 사용)
    - Variable(optional): `CORS_ORIGINS=https://admin.example.com,https://app.example.com`
    - Secret: `JWT_ACCESS_SECRET`
    - Secret: `JWT_REFRESH_SECRET`
