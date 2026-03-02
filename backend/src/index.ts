@@ -887,8 +887,8 @@ async function callGeminiWithGrounding(model: string, apiKey: string, systemProm
   );
   if (!response.ok) {
     const errorBody = await response.text().catch(() => 'unknown');
-    // If grounding is not supported for this model, fall back to standard call
-    if (response.status === 400) {
+    // If grounding fails (unsupported model or upstream timeout), fall back to standard call
+    if (response.status === 400 || response.status === 408 || response.status === 504 || response.status === 524) {
       return callGemini(model, apiKey, systemPrompt, userMessage, maxTokens);
     }
     throw new Error(`Gemini API (grounded) returned ${response.status}: ${errorBody}`);
