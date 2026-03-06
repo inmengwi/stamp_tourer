@@ -48,6 +48,7 @@ type Variables = {
   traceId: string;
   userId?: string;
   userNickname?: string;
+  userRole?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -176,6 +177,7 @@ const optionalAuth = async (c: any, next: any) => {
         const payload = await verifyJwt(token, secret);
         if (typeof payload.sub === 'string') c.set('userId', payload.sub);
         if (typeof payload.nickname === 'string') c.set('userNickname', payload.nickname);
+        if (typeof payload.role === 'string') c.set('userRole', payload.role);
       } catch {
         // ignore — proceed as unauthenticated
       }
@@ -200,7 +202,37 @@ const requireAuth = async (c: any, next: any) => {
     if (typeof payload.sub !== 'string') throw new Error('missing sub');
     c.set('userId', payload.sub);
     if (typeof payload.nickname === 'string') c.set('userNickname', payload.nickname);
+    if (typeof payload.role === 'string') c.set('userRole', payload.role);
   } catch {
+    throw new AppHttpError(401, { code: 'INVALID_TOKEN', message: '유효하지 않은 인증 정보입니다.' });
+  }
+  await next();
+};
+
+// Admin only: throws 403 if user is not admin
+const requireAdmin = async (c: any, next: any) => {
+  const authHeader = c.req.header('Authorization') as string | undefined;
+  if (!authHeader?.startsWith('Bearer ')) {
+    throw new AppHttpError(401, { code: 'UNAUTHORIZED', message: '로그인이 필요합니다.' });
+  }
+  const token = authHeader.slice(7);
+  const secret = c.env.JWT_SECRET as string | undefined;
+  if (!secret) {
+    throw new AppHttpError(500, { code: 'SERVER_CONFIG_ERROR', message: '서버 설정 오류입니다.' });
+  }
+  try {
+    const payload = await verifyJwt(token, secret);
+    if (typeof payload.sub !== 'string') throw new Error('missing sub');
+    c.set('userId', payload.sub);
+    if (typeof payload.nickname === 'string') c.set('userNickname', payload.nickname);
+    if (typeof payload.role === 'string') c.set('userRole', payload.role);
+
+    const role = payload.role as string | undefined;
+    if (role !== 'admin') {
+      throw new AppHttpError(403, { code: 'FORBIDDEN', message: '관리자 권한이 필요합니다.' });
+    }
+  } catch (err) {
+    if (err instanceof AppHttpError) throw err;
     throw new AppHttpError(401, { code: 'INVALID_TOKEN', message: '유효하지 않은 인증 정보입니다.' });
   }
   await next();
@@ -1163,10 +1195,11 @@ app.post('/api/v1/auth/register', validateJson(registerBodySchema), async (c) =>
   const passwordHash = await hashPassword(password);
   const now = Date.now();
 
+  const role = 'tourer';
   await c.env.DB.prepare(
     'INSERT INTO users (id, email, password_hash, nickname, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
   )
-    .bind(id, email, passwordHash, nickname, 'user', now, now)
+    .bind(id, email, passwordHash, nickname, role, now, now)
     .run();
 
   const secret = c.env.JWT_SECRET;
@@ -1174,12 +1207,12 @@ app.post('/api/v1/auth/register', validateJson(registerBodySchema), async (c) =>
   const iat = Math.floor(Date.now() / 1000);
 
   const token = await signJwt(
-    { sub: id, nickname, email, iat, exp: iat + ttl, iss: c.env.JWT_ISSUER },
+    { sub: id, nickname, email, role, iat, exp: iat + ttl, iss: c.env.JWT_ISSUER },
     secret,
   );
 
   return c.json<ApiSuccess<{ token: string; user: unknown }>>(
-    { success: true, data: { token, user: { id, email, nickname } } },
+    { success: true, data: { token, user: { id, email, nickname, role } } },
     201,
   );
 });
@@ -1187,9 +1220,9 @@ app.post('/api/v1/auth/register', validateJson(registerBodySchema), async (c) =>
 app.post('/api/v1/auth/login', validateJson(loginBodySchema), async (c) => {
   const { email, password } = c.req.valid('json');
 
-  const user = await c.env.DB.prepare('SELECT id, email, password_hash, nickname FROM users WHERE email = ?')
+  const user = await c.env.DB.prepare('SELECT id, email, password_hash, nickname, role FROM users WHERE email = ?')
     .bind(email)
-    .first<{ id: string; email: string; password_hash: string; nickname: string }>();
+    .first<{ id: string; email: string; password_hash: string; nickname: string; role: string }>();
 
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     throw new AppHttpError(401, { code: 'INVALID_CREDENTIALS', message: '이메일 또는 비밀번호가 올바르지 않습니다.' });
@@ -1200,13 +1233,13 @@ app.post('/api/v1/auth/login', validateJson(loginBodySchema), async (c) => {
   const iat = Math.floor(Date.now() / 1000);
 
   const token = await signJwt(
-    { sub: user.id, nickname: user.nickname, email: user.email, iat, exp: iat + ttl, iss: c.env.JWT_ISSUER },
+    { sub: user.id, nickname: user.nickname, email: user.email, role: user.role, iat, exp: iat + ttl, iss: c.env.JWT_ISSUER },
     secret,
   );
 
   return c.json<ApiSuccess<{ token: string; user: unknown }>>({
     success: true,
-    data: { token, user: { id: user.id, email: user.email, nickname: user.nickname } },
+    data: { token, user: { id: user.id, email: user.email, nickname: user.nickname, role: user.role } },
   });
 });
 
@@ -1354,7 +1387,7 @@ app.get('/api/v1/tours', validateQuery(listToursQuerySchema), async (c) => {
   });
 });
 
-app.post('/api/v1/tours', validateJson(createTourBodySchema), async (c) => {
+app.post('/api/v1/tours', requireAdmin, validateJson(createTourBodySchema), async (c) => {
   const body = c.req.valid('json');
   const now = Date.now();
   const id = crypto.randomUUID();
@@ -1480,7 +1513,7 @@ app.post('/api/v1/tours', validateJson(createTourBodySchema), async (c) => {
   );
 });
 
-app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), async (c) => {
+app.post('/api/v1/tours/search-online', requireAdmin, validateJson(searchOnlineBodySchema), async (c) => {
   const { name, description } = c.req.valid('json');
   const userMessage = description
     ? `투어 이름: ${name}\n투어 설명: ${description}`
@@ -1503,7 +1536,7 @@ app.post('/api/v1/tours/search-online', validateJson(searchOnlineBodySchema), as
   );
 });
 
-app.post('/api/v1/tours/search-online/metadata', validateJson(searchOnlineBodySchema), async (c) => {
+app.post('/api/v1/tours/search-online/metadata', requireAdmin, validateJson(searchOnlineBodySchema), async (c) => {
   const { name, description } = c.req.valid('json');
   const userMessage = description
     ? `투어 이름: ${name}\n투어 설명: ${description}`
@@ -1529,7 +1562,7 @@ app.post('/api/v1/tours/search-online/metadata', validateJson(searchOnlineBodySc
   );
 });
 
-app.post('/api/v1/tours/search-online/organize', validateJson(organizeBodySchema), async (c) => {
+app.post('/api/v1/tours/search-online/organize', requireAdmin, validateJson(organizeBodySchema), async (c) => {
   const { title, description, category, tourType, organizer } = c.req.valid('json');
   const parts = [`투어 이름: ${title}`];
   if (description) parts.push(`투어 설명: ${description}`);
