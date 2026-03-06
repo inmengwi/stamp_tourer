@@ -1,5 +1,8 @@
 -- Migrate role values: 'user' -> 'tourer', and update CHECK constraint
-PRAGMA foreign_keys = OFF;
+-- PRAGMA defer_foreign_keys defers FK checks to commit time, allowing the
+-- intermediate state where users is dropped before users_new is renamed.
+-- (PRAGMA foreign_keys = OFF is a no-op inside a transaction, which D1 uses.)
+PRAGMA defer_foreign_keys = ON;
 
 CREATE TABLE users_new (
   id TEXT PRIMARY KEY,
@@ -19,5 +22,3 @@ INSERT INTO users_new
 
 DROP TABLE users;
 ALTER TABLE users_new RENAME TO users;
-
-PRAGMA foreign_keys = ON;
