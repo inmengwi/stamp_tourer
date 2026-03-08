@@ -65,6 +65,7 @@ export function App() {
   const [tours, setTours] = useState([]);
   const [selectedTourId, setSelectedTourId] = useState('');
   const [selectedTour, setSelectedTour] = useState(null);
+  const [subTourFilter, setSubTourFilter] = useState('all');
 
   const [activePlans, setActivePlans] = useState([]); // tourId[]
   const [completedPlans, setCompletedPlans] = useState([]); // tourId[]
@@ -167,6 +168,7 @@ export function App() {
   const openDetail = async (tourId) => {
     setCurrentPage('detail');
     setSelectedTourId(tourId);
+    setSubTourFilter('all');
     setScreen('detail', { loading: true, error: '' });
     try {
       const data = await getTourDetail(tourId);
@@ -181,6 +183,7 @@ export function App() {
   const openProgress = async (tourId) => {
     setCurrentPage('progress');
     setSelectedTourId(tourId);
+    setSubTourFilter('all');
     setScreen('progress', { loading: true, error: '' });
     try {
       const [tourData, schedulesData] = await Promise.all([
@@ -630,6 +633,7 @@ export function App() {
         lat: s.lat,
         lng: s.lng,
         verificationTypes: s.verificationTypes || ['manual'],
+        subTourTitle: s.subTourTitle || undefined,
       })),
     };
 
@@ -661,6 +665,16 @@ export function App() {
     () => tours.flatMap((tour) => (tour.spots ?? []).map((spot) => ({ ...spot, tourTitle: tour.title }))),
     [tours],
   );
+
+  const subTourTitles = useMemo(() => {
+    return [...new Set((selectedTour?.spots ?? []).map((s) => s.subTourTitle).filter(Boolean))];
+  }, [selectedTour]);
+
+  const filteredSpots = useMemo(() => {
+    const spots = selectedTour?.spots ?? [];
+    if (subTourFilter === 'all') return spots;
+    return spots.filter((s) => s.subTourTitle === subTourFilter);
+  }, [selectedTour, subTourFilter]);
 
   const activeTours = tours.filter((tour) => activePlans.includes(tour.id));
   const doneTours = tours.filter((tour) => completedPlans.includes(tour.id));
@@ -889,9 +903,31 @@ export function App() {
               </div>
 
               <div className="detail-section">
-                <h3>방문 장소 ({(selectedTour.spots ?? []).length}곳)</h3>
+                <h3>
+                  방문 장소 ({filteredSpots.length}곳
+                  {subTourFilter !== 'all' && ` / 전체 ${(selectedTour.spots ?? []).length}곳`})
+                </h3>
+                {subTourTitles.length > 1 && (
+                  <div className="plan-filter-tabs" role="tablist">
+                    <button
+                      className={`plan-filter-tab${subTourFilter === 'all' ? ' is-active' : ''}`}
+                      onClick={() => setSubTourFilter('all')}
+                    >
+                      전체
+                    </button>
+                    {subTourTitles.map((title) => (
+                      <button
+                        key={title}
+                        className={`plan-filter-tab${subTourFilter === title ? ' is-active' : ''}`}
+                        onClick={() => setSubTourFilter(title)}
+                      >
+                        {title}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <ul className="spot-list">
-                  {(selectedTour.spots ?? []).map((spot, idx) => (
+                  {filteredSpots.map((spot, idx) => (
                     <li key={spot.id} className="spot-card">
                       <div className="spot-number">{idx + 1}</div>
                       <div className="spot-info">
@@ -951,22 +987,43 @@ export function App() {
                 <h3>방문 진행률</h3>
                 <div className="detail-progress">
                   <progress
-                    value={(selectedTour.spots ?? []).filter((spot) =>
+                    value={filteredSpots.filter((spot) =>
                       records.some((r) => String(r.spotId) === String(spot.id))
                     ).length}
-                    max={(selectedTour.spots ?? []).length || 1}
+                    max={filteredSpots.length || 1}
                   />
                   <span>
-                    {(selectedTour.spots ?? []).filter((spot) =>
+                    {filteredSpots.filter((spot) =>
                       records.some((r) => String(r.spotId) === String(spot.id))
                     ).length}
                     {' / '}
-                    {(selectedTour.spots ?? []).length}곳 완료
+                    {filteredSpots.length}곳 완료
+                    {subTourFilter !== 'all' && ` (전체 ${(selectedTour.spots ?? []).length}곳)`}
                   </span>
                 </div>
 
+                {subTourTitles.length > 1 && (
+                  <div className="plan-filter-tabs" role="tablist">
+                    <button
+                      className={`plan-filter-tab${subTourFilter === 'all' ? ' is-active' : ''}`}
+                      onClick={() => setSubTourFilter('all')}
+                    >
+                      전체
+                    </button>
+                    {subTourTitles.map((title) => (
+                      <button
+                        key={title}
+                        className={`plan-filter-tab${subTourFilter === title ? ' is-active' : ''}`}
+                        onClick={() => setSubTourFilter(title)}
+                      >
+                        {title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <ul className="spot-list">
-                  {(selectedTour.spots ?? []).map((spot, idx) => {
+                  {filteredSpots.map((spot, idx) => {
                     const isVisited = records.some(
                       (r) => String(r.spotId) === String(spot.id)
                     );
