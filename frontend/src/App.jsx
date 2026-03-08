@@ -89,7 +89,7 @@ export function App() {
   const [localMatch, setLocalMatch] = useState(null);
 
   // ---- User / Auth State ----
-  const [currentUser, setCurrentUser] = useState(null); // { id, email, nickname }
+  const [currentUser, setCurrentUser] = useState(null); // { id, email, nickname, role }
   const [authModal, setAuthModal] = useState(null); // 'login' | 'register' | null
   const [authTab, setAuthTab] = useState('login'); // 'login' | 'register'
   const [authForm, setAuthForm] = useState(emptyAuthForm());
@@ -1024,12 +1024,20 @@ export function App() {
       {currentPage === 'register' && registerStep === 'input' && (
         <section className="card">
           <h2>투어 등록</h2>
-          {!currentUser && (
+          {currentUser?.role !== 'admin' && (
             <div className="auth-nudge">
-              <p>투어를 등록하려면 로그인이 필요합니다.</p>
-              <button className="btn-primary" onClick={() => { setAuthTab('login'); setAuthModal('open'); }}>로그인하기</button>
+              {!currentUser ? (
+                <>
+                  <p>투어를 등록하려면 로그인이 필요합니다.</p>
+                  <button className="btn-primary" onClick={() => { setAuthTab('login'); setAuthModal('open'); }}>로그인하기</button>
+                </>
+              ) : (
+                <p>관리자 권한이 필요합니다.</p>
+              )}
             </div>
           )}
+          {currentUser?.role === 'admin' && (
+          <>
           <p className="helper">스탬프 투어 이름과 설명을 입력하면 온라인에서 상세 정보를 조회합니다.</p>
 
           <div className="reg-input-group">
@@ -1087,6 +1095,8 @@ export function App() {
               ))}
             </ul>
           </div>
+          </>
+          )}
         </section>
       )}
 
@@ -1556,7 +1566,7 @@ export function App() {
       </div>
 
       <nav className="bottom-nav">
-        {pages.map((page) => (
+        {pages.filter((p) => p.key !== 'register' || currentUser?.role === 'admin').map((page) => (
           <button
             key={page.key}
             type="button"
