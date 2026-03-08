@@ -87,7 +87,7 @@ export function App() {
   const [editNotices, setEditNotices] = useState([]);
   const [aiLogs, setAiLogs] = useState([]);
   const [tourMetadata, setTourMetadata] = useState(null);
-  const [localMatch, setLocalMatch] = useState(null);
+
 
   // ---- User / Auth State ----
   const [currentUser, setCurrentUser] = useState(null); // { id, email, nickname, role }
@@ -356,18 +356,6 @@ export function App() {
     closeMenu();
   };
 
-  const extractSpotsFromTour = (tour) => {
-    if (Array.isArray(tour.subTours) && tour.subTours.length > 0) {
-      return tour.subTours.flatMap((subTour) =>
-        subTour.stamps.map((stamp) => ({
-          ...stamp,
-          subTourTitle: subTour.title,
-        })),
-      );
-    }
-    return tour.spots ?? [];
-  };
-
   const applyTourMetadata = (t) => {
     setRegisterForm({
       title: t.title,
@@ -419,7 +407,6 @@ export function App() {
     setRegisterStep('searching');
     setAiLogs([]);
     setTourMetadata(null);
-    setLocalMatch(null);
 
     try {
       const data = await searchTourMetadataWithLogs(searchName, searchDesc, (log) => {
@@ -430,48 +417,20 @@ export function App() {
       applyTourMetadata(meta);
       setRegisterStep('review');
     } catch (error) {
-      console.warn('AI metadata search failed, falling back to local DB:', error.message);
-      setAiLogs((prev) => [...prev, { step: 'fallback', message: '로컬 데이터베이스에서 검색합니다...', timestamp: Date.now() }]);
-      const query = `${searchName} ${searchDesc}`.toLowerCase();
-      const match = ONLINE_TOUR_DB.find((entry) =>
-        entry.keywords.some((kw) => query.includes(kw)),
-      );
-      if (match) {
-        setLocalMatch(match.tour);
-        setTourMetadata(match.tour);
-        applyTourMetadata(match.tour);
-        setRegisterStep('review');
-      } else {
-        setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
-        setEditSpots([]);
-        setOnlineStructure([]);
-        setEditMilestones([]);
-        setEditNotices([]);
-        setRegisterStep('edit');
-      }
+      console.warn('AI metadata search failed:', error.message);
+      setAiLogs((prev) => [...prev, { step: 'fallback', message: 'AI 검색에 실패했습니다. 직접 입력해주세요.', timestamp: Date.now() }]);
+      setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
+      setEditSpots([]);
+      setOnlineStructure([]);
+      setEditMilestones([]);
+      setEditNotices([]);
+      setRegisterStep('edit');
     }
   };
 
   const organizeSpots = async () => {
     setRegisterStep('organizing');
     setAiLogs([]);
-
-    if (localMatch) {
-      // 로컬 DB 폴백: subTours가 있으면 그대로, 없으면 단일 서브투어로 래핑
-      setAiLogs([{ step: 'fallback', message: '로컬 데이터베이스에서 장소를 정리합니다...', timestamp: Date.now() }]);
-      if (localMatch.subTours && localMatch.subTours.length > 0) {
-        applyTourSpots({ subTours: localMatch.subTours });
-      } else {
-        const spots = localMatch.spots ?? [];
-        applyTourSpots({
-          subTours: spots.length > 0
-            ? [{ id: 'main', title: localMatch.title || '전체 코스', description: '', stamps: spots }]
-            : [],
-        });
-      }
-      setRegisterStep('edit');
-      return;
-    }
 
     const meta = tourMetadata || registerForm;
     if (!meta) {
@@ -519,24 +478,13 @@ export function App() {
       applyTourMetadata(t);
       applyTourSpots(t);
     } catch (error) {
-      console.warn('AI search failed, falling back to local DB:', error.message);
-      setAiLogs((prev) => [...prev, { step: 'fallback', message: '로컬 데이터베이스에서 검색합니다...', timestamp: Date.now() }]);
-      const query = `${searchName} ${searchDesc}`.toLowerCase();
-      const match = ONLINE_TOUR_DB.find((entry) =>
-        entry.keywords.some((kw) => query.includes(kw)),
-      );
-      if (match) {
-        applyTourMetadata(match.tour);
-        const spotsFromResult = extractSpotsFromTour(match.tour);
-        setEditSpots(spotsFromResult.map((s) => ({ ...s, id: crypto.randomUUID() })));
-        setOnlineStructure(match.tour.subTours ?? []);
-      } else {
-        setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
-        setEditSpots([]);
-        setOnlineStructure([]);
-        setEditMilestones([]);
-        setEditNotices([]);
-      }
+      console.warn('AI search failed:', error.message);
+      setAiLogs((prev) => [...prev, { step: 'fallback', message: 'AI 검색에 실패했습니다. 직접 입력해주세요.', timestamp: Date.now() }]);
+      setRegisterForm({ ...emptyForm(), title: searchName, description: searchDesc });
+      setEditSpots([]);
+      setOnlineStructure([]);
+      setEditMilestones([]);
+      setEditNotices([]);
     }
 
     setRegisterStep('edit');
@@ -605,7 +553,6 @@ export function App() {
     setOnlineStructure([]);
     setAiLogs([]);
     setTourMetadata(null);
-    setLocalMatch(null);
   };
 
   const onSubmitRegistration = async () => {
