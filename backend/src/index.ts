@@ -414,6 +414,7 @@ const createTourBodySchema = z.object({
     lat: z.number().optional(),
     lng: z.number().optional(),
     verificationTypes: z.array(z.string()).optional(),
+    subTourTitle: z.string().max(120).optional(),
   })).optional(),
   milestones: z.array(z.object({
     stampCount: z.number().optional(),
@@ -1420,11 +1421,11 @@ app.post('/api/v1/tours', requireAdmin, validateJson(createTourBodySchema), asyn
   if (body.spots?.length) {
     const stmts = body.spots.map((spot, idx) => {
       const spotId = spot.id || crypto.randomUUID();
-      spots.push({ id: spotId, name: spot.name, description: spot.description ?? null, address: spot.address ?? null, openHours: spot.openHours ?? null, lat: spot.lat ?? null, lng: spot.lng ?? null });
+      spots.push({ id: spotId, name: spot.name, description: spot.description ?? null, address: spot.address ?? null, openHours: spot.openHours ?? null, lat: spot.lat ?? null, lng: spot.lng ?? null, subTourTitle: spot.subTourTitle ?? null });
       return c.env.DB.prepare(
-        `INSERT INTO tour_spots (id, tour_id, name, description, address, lat, lng, operation_hours, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(spotId, id, spot.name, spot.description ?? null, spot.address ?? null, spot.lat ?? null, spot.lng ?? null, spot.openHours ?? null, idx, now, now);
+        `INSERT INTO tour_spots (id, tour_id, name, description, address, lat, lng, operation_hours, sub_tour_title, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(spotId, id, spot.name, spot.description ?? null, spot.address ?? null, spot.lat ?? null, spot.lng ?? null, spot.openHours ?? null, spot.subTourTitle ?? null, idx, now, now);
     });
     await c.env.DB.batch(stmts);
   }
@@ -1636,7 +1637,7 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
 
   // Query tour_spots first, fall back to stamp_spots for legacy data
   const tourSpotsResult = await c.env.DB.prepare(
-    `SELECT id, name, description, address, lat, lng, operation_hours AS openHours
+    `SELECT id, name, description, address, lat, lng, operation_hours AS openHours, sub_tour_title AS subTourTitle
      FROM tour_spots
      WHERE tour_id = ?
      ORDER BY sort_order ASC, created_at ASC`,
@@ -1650,9 +1651,10 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
       lat: number | null;
       lng: number | null;
       openHours: string | null;
+      subTourTitle: string | null;
     }>();
 
-  let spots: Array<{ id: string; name: string; description: string | null; address: string | null; lat: number | null; lng: number | null; openHours: string | null }>;
+  let spots: Array<{ id: string; name: string; description: string | null; address: string | null; lat: number | null; lng: number | null; openHours: string | null; subTourTitle: string | null }>;
   if ((tourSpotsResult.results ?? []).length > 0) {
     spots = (tourSpotsResult.results ?? []).map((spot) => ({
       id: spot.id,
@@ -1662,6 +1664,7 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
       lat: spot.lat,
       lng: spot.lng,
       openHours: spot.openHours,
+      subTourTitle: spot.subTourTitle,
     }));
   } else {
     // Fallback to legacy stamp_spots table
@@ -1687,6 +1690,7 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
       lat: null,
       lng: null,
       openHours: spot.openHours,
+      subTourTitle: null,
     }));
   }
 
