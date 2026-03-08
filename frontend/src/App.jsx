@@ -9,7 +9,7 @@ import {
   SORT_OPTIONS,
   VERIFICATION_OPTIONS,
 } from './data';
-import { createTour, getTourDetail, getTours, searchTourOnline, searchTourOnlineWithLogs, searchTourMetadataWithLogs, organizeTourSpotsWithLogs } from './api/toursApi';
+import { createTour, deleteTour, getTourDetail, getTours, searchTourOnline, searchTourOnlineWithLogs, searchTourMetadataWithLogs, organizeTourSpotsWithLogs } from './api/toursApi';
 import { completeTourParticipation, joinTour, toggleTourWishlist } from './api/participationApi';
 import { createStampRecord } from './api/stampsApi';
 import { getSchedules, upsertSchedule } from './api/schedulesApi';
@@ -261,6 +261,34 @@ export function App() {
     }
   };
 
+
+  const onDeleteTour = async (tourId) => {
+    if (currentUser?.role !== 'admin') return;
+    const targetTour = tours.find((tour) => tour.id === tourId);
+    const targetTitle = targetTour?.title || '해당 투어';
+    const confirmed = window.confirm(`"${targetTitle}" 투어를 삭제할까요? 삭제된 데이터는 복구할 수 없습니다.`);
+    if (!confirmed) return;
+
+    setScreen('action', { loading: true, error: '' });
+    try {
+      await deleteTour(tourId);
+      setTours((prev) => prev.filter((tour) => tour.id !== tourId));
+      setActivePlans((prev) => prev.filter((id) => id !== tourId));
+      setCompletedPlans((prev) => prev.filter((id) => id !== tourId));
+      setWishlist((prev) => prev.filter((id) => id !== tourId));
+      if (selectedTourId === tourId) {
+        setSelectedTourId('');
+        setSelectedTour(null);
+      }
+      if ((currentPage === 'detail' || currentPage === 'progress') && selectedTourId === tourId) {
+        setCurrentPage('discover');
+      }
+    } catch (error) {
+      setScreen('action', { error: error.message || '투어 삭제에 실패했습니다.' });
+    } finally {
+      setScreen('action', { loading: false });
+    }
+  };
   const onCompleteTour = async (tourId) => {
     setScreen('action', { loading: true, error: '' });
     try {
@@ -848,6 +876,9 @@ export function App() {
                     <button className="btn" onClick={() => onToggleWishlist(tour.id)}>{wishlist.includes(tour.id) ? '찜 해제' : '♥ 찜'}</button>
                     <button className="btn-accent" onClick={() => onJoinTour(tour.id)}>참여</button>
                   </div>
+                  {currentUser?.role === 'admin' && (
+                    <button className="btn-remove" onClick={() => onDeleteTour(tour.id)}>투어 삭제</button>
+                  )}
                 </div>
               </li>
             ))}
