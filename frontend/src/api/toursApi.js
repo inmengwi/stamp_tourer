@@ -18,6 +18,8 @@ export const getTourDetail = (tourId) => apiRequest(`/tours/${tourId}`, { retrie
 
 export const createTour = (payload) => apiRequest('/tours', { method: 'POST', body: payload });
 
+export const deleteTour = (tourId) => apiRequest(`/tours/${tourId}`, { method: 'DELETE' });
+
 export const searchTourOnline = (name, description) =>
   apiRequest('/tours/search-online', {
     method: 'POST',

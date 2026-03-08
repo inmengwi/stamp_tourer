@@ -1417,7 +1417,7 @@ app.post('/api/v1/tours', requireAdmin, validateJson(createTourBodySchema), asyn
     .run();
 
   // Insert spots into tour_spots
-  const spots: Array<{ id: string; name: string; description: string | null; address: string | null; openHours: string | null; lat: number | null; lng: number | null }> = [];
+  const spots: Array<{ id: string; name: string; description: string | null; address: string | null; openHours: string | null; lat: number | null; lng: number | null; subTourTitle: string | null }> = [];
   if (body.spots?.length) {
     const stmts = body.spots.map((spot, idx) => {
       const spotId = spot.id || crypto.randomUUID();
@@ -1757,6 +1757,32 @@ app.get('/api/v1/tours/:tourId', validateParam(tourIdParamSchema), async (c) => 
 });
 
 // ---- Participation Endpoints ----
+
+
+app.delete('/api/v1/tours/:tourId', requireAdmin, validateParam(tourIdParamSchema), async (c) => {
+  const { tourId } = c.req.valid('param');
+
+  await assertTourExists(c.env.DB, tourId);
+
+  await c.env.DB.prepare('DELETE FROM spot_schedules WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM stamp_records WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM tour_participations WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM tour_wishlist WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM wishlists WHERE tour_id = ?').bind(tourId).run();
+
+  await c.env.DB.prepare('DELETE FROM tour_notices WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM tour_milestones WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM tour_tags WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM tour_verification_methods WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM tour_spots WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM stamp_spots WHERE tour_id = ?').bind(tourId).run();
+  await c.env.DB.prepare('DELETE FROM tours WHERE id = ?').bind(tourId).run();
+
+  return c.json<ApiSuccess<{ deletedTourId: string }>>({
+    success: true,
+    data: { deletedTourId: tourId },
+  });
+});
 
 app.post(
   '/api/v1/tours/:tourId/participation',
